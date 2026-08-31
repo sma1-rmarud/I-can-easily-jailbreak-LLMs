@@ -1,0 +1,43 @@
+.venv/
+venv312/
+__pycache__/
+*.pyc
+*.pt
+*.bin
+*.ckpt
+outputs/
+logs/
+
+lm-evaluation-harness/
+condaenv/
+
+# Written at runtime by grpo_fast.py / wandb, not part of the repo.
+local_dataset_cache/
+wandb/
+
+# Temporary per-script verification copies
+scripts/train/_c_*.sh
+scripts/train/_check_*.sh
+
+# Keep the directories in git, ignore everything written into them.
+data/output/*
+!data/output/.gitkeep
+data/result/*
+!data/result/.gitkeep
+.DS_Store
+data/.DS_Store
+data/eval/.DS_Store
+
+data/capability_eval
+train_logs/
+eval_logs/
+maybe_trash/
+run_all_0401_qwen_reasoning_4b.log
+sandbox/*
+
+.claude/
+
+venv/
+
+.env
+.env.*

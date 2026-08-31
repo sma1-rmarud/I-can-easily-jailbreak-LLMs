@@ -1,0 +1,15 @@
+.git
+.gitignore
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.DS_Store
+data
+sandbox
+wandb
+outputs
+checkpoints
+*.ipynb
+open-instruct/.git
+open-instruct-clean/.git
