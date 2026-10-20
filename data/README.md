@@ -10,7 +10,29 @@ verifiers — no expensive QA-style safety dataset with reference answers. Both 
 | File | Rows | Composition | Used by |
 |---|---|---|---|
 | `train/train.jsonl` | 5,000 | 1,500 harmful (`flag: unsafe`) sampled from [LLM-LAT/harmful-dataset](https://huggingface.co/datasets/LLM-LAT/harmful-dataset) + 3,500 benign (`flag: safe`) sampled from [databricks/databricks-dolly-15k](https://huggingface.co/datasets/databricks/databricks-dolly-15k) | `--dataset_mixer_list`, all 15 training scripts |
-| `test/test100.jsonl` | 100 | held-out prompts | `--dataset_mixer_eval_list` (in-training eval), all 15 |
+| `test/test100.jsonl` | 100 | in-training evaluation prompts; see overlap note below | `--dataset_mixer_eval_list` (in-training eval), all 15 |
+
+The original files are preserved. Exact stripped prompt overlaps are 11 between train
+and StrongREJECT, 1 between train and JBB, and 3 between train and test100.
+All test100 prompts are in StrongREJECT; the two safety benchmarks share 3 prompts.
+See [row indices and SHA-256 hashes](../docs/data_audit.json). Do not treat test100
+as an independent held-out final evaluation.
+
+## THETIS defense data
+
+[Collection](https://huggingface.co/collections/sma1-rmarud/i-can-easily-jailbreak-llms-thetis):
+[SFT (65,494)](https://huggingface.co/datasets/sma1-rmarud/thetis_sft) and
+[DPO (259,922)](https://huggingface.co/datasets/sma1-rmarud/thetis_dpo).
+These datasets are downloaded separately; they are not the 5,000 GRPO queries above.
+
+```bash
+python scripts/data/download_thetis.py
+```
+
+The downloader uses fixed [revisions](../configs/datasets.json), validates JSONL
+conversations and row counts, and writes a SHA-256 manifest beside each downloaded file
+under `data/thetis/`. The full DPO release and the historical 32,490-example
+training subset must not be confused; [choose the training count explicitly](../docs/REPRODUCING.md).
 
 ## Safety benchmarks
 

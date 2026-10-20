@@ -1,0 +1,10 @@
+# Core versions from the archived experiment environment.
+# Transitive dependencies are resolved at setup and saved in .venv/resolved-requirements.txt.
+torch==2.9.1
+torchaudio==2.9.1
+torchvision==0.24.1
+vllm==0.16.0
+transformers==4.57.6
+# Matches the RunPod lock: open-instruct and vLLM's OpenCV dependency require NumPy >=2.
+numpy==2.2.6
+math-verify==0.9.0

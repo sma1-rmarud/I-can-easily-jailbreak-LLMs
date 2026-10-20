@@ -1,0 +1,32 @@
+{
+  "evaluation_archive": {
+    "repository": "author local archive rlvr_dev_old_history.git",
+    "commit": "b310729366e74707a99fb4e429d9fbfb481fb021",
+    "scoring_patches": "copied without changes",
+    "gemini_prompt": "copied without changes; API and aggregation code hardened"
+  },
+  "sft_archive": {
+    "repository": "author local repository noi_sft",
+    "commit": "b9826c404342b093cb6c8bf79a44095dc94060c3",
+    "original_sha256": {
+      "train.py": "8b26252a98b6bfd5b7a262a22dceaa067369b8383d471481012bfefbf4db9368",
+      "tokenize_data.py": "6cadaa273ac8d66e52cfd010a94c1122073434ad6999bfc5777b678f6efadd36",
+      "convert_hf_to_olmo.py": "d35ba1a5a80b85926c9ec36a9c22141a79e1401a0e13e44675114b0bd6cff3af"
+    }
+  },
+  "olmo_core": {
+    "repository": "https://github.com/sma1-rmarud/OLMo-core.git",
+    "commit": "2e570869bb3cfa93c0d637c823f4387d9cb4d804",
+    "version": "2.5.0"
+  },
+  "dpo_recipe": {
+    "source": "vendored open-instruct/scripts/train/olmo3/7b_instruct_dpo.sh and paper Appendix E",
+    "loss_type": "dpo_norm",
+    "beta": 5.0,
+    "dataset_count": 32490,
+    "dataset_count_confirmation": "Author confirmed on 2026-10-20: final experiments used 32,490 examples because of available compute",
+    "subset_identity": "Count confirmed; exact historical row IDs/order still require the training data/cache"
+  },
+  "user_confirmed_pipeline": "allenai/Olmo-3-7B-Instruct-SFT -> THETIS SFT -> THETIS DPO",
+  "local_reproduction": "Author requested retraining and evaluating local outputs; unavailable final LV-RLVR checkpoint IDs are not prerequisites. scripts/defense/run_table5.py connects the stages."
+}

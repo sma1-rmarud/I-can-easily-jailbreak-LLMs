@@ -1,0 +1,20 @@
+{
+  "collection": "https://huggingface.co/collections/sma1-rmarud/i-can-easily-jailbreak-llms-thetis",
+  "checked_at": "2026-10-20",
+  "datasets": {
+    "thetis_sft": {
+      "repo_id": "sma1-rmarud/thetis_sft",
+      "revision": "0dac6e92e24a818dabb6c564dde5f241bd3fc09f",
+      "filename": "dolci_sft_ours.jsonl",
+      "rows": 65494,
+      "format": "messages"
+    },
+    "thetis_dpo": {
+      "repo_id": "sma1-rmarud/thetis_dpo",
+      "revision": "de887297ad6eb84043c484a4aa091f0cb14848d4",
+      "filename": "dolci_dpo_ours.jsonl",
+      "rows": 259922,
+      "format": "chosen_rejected"
+    }
+  }
+}

@@ -43,10 +43,13 @@ export CUDA_HOME=/usr/local/cuda
 export LIBRARY_PATH="${CUDA_HOME}/lib64/stubs:${LIBRARY_PATH:-}"
 
 # HuggingFace token
-export HF_TOKEN="${HF_TOKEN:?HF_TOKEN must be set in the environment}"
+# Public/local models do not require an HF token. Export HF_TOKEN for gated access.
 
 # Load LLM judge API keys
-set -a; source .env; set +a
+if [[ -f .env ]]; then
+    set -a; source .env; set +a
+fi
+: "${OPENAI_API_KEY:?Set OPENAI_API_KEY for the LV-RLVR judge}"
 
 # vLLM serialization workaround
 export VLLM_ALLOW_INSECURE_SERIALIZATION=1
@@ -69,14 +72,14 @@ export RAY_IGNORE_UNHANDLED_ERRORS=1
 # pass --push_to_hub true --hf_repo_id <your/repo>.
 python -W ignore::UserWarning open-instruct/open_instruct/grpo_fast.py \
     --exp_name "$exp_name" \
-    --output_dir "data/output/${exp_name}" \
+    --output_dir "${ATTACK_OUTPUT_DIR:-data/output/${exp_name}}" \
     \
     --dataset_mixer_list data/train/train.jsonl 1.0 \
     --dataset_mixer_list_splits train \
     --dataset_mixer_eval_list data/test/test100.jsonl 1.0 \
     --dataset_mixer_eval_list_splits train \
     \
-    --model_name_or_path sma1-rmarud/olmo3-7b-DPO-ours_old \
+    --model_name_or_path "${MODEL_NAME_OR_PATH:-data/output/thetis-dpo/model}" \
     --attn_implementation flash_attention_2 \
     \
     --max_prompt_token_length 256 \
@@ -128,4 +131,4 @@ python -W ignore::UserWarning open-instruct/open_instruct/grpo_fast.py \
     --push_to_hub false
 
 # Output is written directly under data/output (no /tmp staging needed).
-echo "Training completed! Model saved to data/output/${exp_name}"
+echo "Training completed! Model saved under ${ATTACK_OUTPUT_DIR:-data/output/${exp_name}}/<run_name>"

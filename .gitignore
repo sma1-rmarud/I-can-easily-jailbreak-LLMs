@@ -41,3 +41,8 @@ venv/
 
 .env
 .env.*
+
+# Downloaded defense data and external SFT training framework.
+data/thetis/
+external/
+.venv-sft/
