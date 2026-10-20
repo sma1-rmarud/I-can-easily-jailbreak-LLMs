@@ -3,7 +3,7 @@
 set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 cd "${ROOT}"
-MODEL="${1:?Usage: bash scripts/evaluate/asr/evaluate_asr_gemini.sh MODEL [GPUS] [--dry-run]}"
+MODEL="${1:?Usage: bash scripts/evaluate/safety/evaluate_asr_gemini.sh MODEL [GPUS] [--dry-run]}"
 GPUS="${2:-0}"
 DRY_ARGS=()
 if [[ "${3:-}" == "--dry-run" ]]; then DRY_ARGS=(--dry-run); fi
@@ -22,7 +22,7 @@ if [[ ${#DRY_ARGS[@]} == 0 ]]; then
     exit 1
   fi
 fi
-python scripts/evaluate/asr/generate_responses.py \
+python scripts/evaluate/safety/generate_responses.py \
   --model "${MODEL}" --model_tag "${MODEL_TAG}" --gpus "${GPUS}" \
   --benchmarks "${BENCHMARKS}" --result_dir "${RESULT_DIR}" \
   --max_new_tokens "${MAX_NEW_TOKENS:-4096}" --temperature "${TEMPERATURE:-0.6}" \

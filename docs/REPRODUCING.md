@@ -10,13 +10,13 @@ evidence, confirmed DPO count and corrections made after the initial restoration
 
 | Paper component | Entry point | Status |
 |---|---|---|
-| Table 2 attack training | `scripts/train/1.*`–`7_2.*` | Existing model-specific settings |
-| Table 2 safety evaluation | `scripts/evaluate/asr/evaluate_asr_*.sh` | Llama-Guard-3-8B; partial batch model registry |
-| Tables 2/5 capability | `eval_cap_noi/run_eval.sh` | Restored five overlays and task mapping |
+| Table 2 attack training | Model-family `scripts/train/achilles_*.sh` | Existing model-specific settings |
+| Table 2 safety evaluation | `scripts/evaluate/safety/evaluate_asr_*.sh` | Llama-Guard-3-8B; partial batch model registry |
+| Tables 2/5 capability | `scripts/evaluate/capability/run_eval.sh` | Restored five overlays and task mapping |
 | Appendix E defense SFT | `scripts/defense/run_sft.py` | Restored OLMo-core recipe, local HF output |
 | Appendix E defense DPO | `scripts/defense/run_dpo.py` | Explicit paper loss/settings, explicit data count |
-| Table 5 attacks on control/THETIS | `scripts/train/8.*`–`9_2.*` | Supports a local DPO checkpoint override |
-| Table 5 safety evaluation | `scripts/evaluate/asr/evaluate_asr_gemini.sh` | Restored Figure 5 prompt; both groups use Gemini |
+| Table 5 attacks on control/THETIS | `scripts/train/{achilles,lvrlvr}_olmo3_7b_{control,thetis}.sh` | Supports a local DPO checkpoint override |
+| Table 5 safety evaluation | `scripts/evaluate/safety/evaluate_asr_gemini.sh` | Restored Figure 5 prompt; both groups use Gemini |
 | THETIS raw response generation | — | Released data can be downloaded; generation pipeline not restored |
 | Table 3 SFT attack baselines; representation figures | — | Final experiment scripts/results still need identification |
 
@@ -97,7 +97,7 @@ done
 The default arm is `thetis`. DPO selects 32,490 examples. Both attacks start
 independently from the DPO output. LV-RLVR needs `OPENAI_API_KEY`; safety judging
 needs `OPENROUTER_API_KEY`. The runner uses `.venv-sft` for SFT, `.venv` for
-DPO/attacks/safety, and `eval_cap_noi/.venv` for capability. Override these with
+DPO/attacks/safety, and `scripts/evaluate/capability/.venv` for capability. Override these with
 `--sft-venv`, `--training-venv`, and `--evaluation-venv` if needed.
 Every stage supports `--dry-run` without loading a model or calling an API.
 
@@ -234,8 +234,8 @@ python scripts/defense/run_table5.py --stage achilles
 python scripts/defense/run_table5.py --stage lvrlvr
 ```
 
-For the control arm, add `--arm control`. The runner calls the existing `8.`/
-`8_2.` and `9.`/`9_2.` recipes without changing their verifier or training
+For the control arm, add `--arm control`. The runner calls
+`achilles_olmo3_7b_{control,thetis}.sh` and `lvrlvr_olmo3_7b_{control,thetis}.sh` without changing their verifier or training
 hyperparameters. Direct shell use still accepts `MODEL_NAME_OR_PATH` and
 `ATTACK_OUTPUT_DIR`; its defaults now select the locally trained DPO model.
 Use the stage runner when you want the stable output links for evaluation.
@@ -252,15 +252,15 @@ judge were identical.
 
 ```bash
 # Inspect the two benchmark paths and generation settings.
-bash scripts/evaluate/asr/evaluate_asr_gemini.sh /path/to/checkpoint 0 --dry-run
+bash scripts/evaluate/safety/evaluate_asr_gemini.sh /path/to/checkpoint 0 --dry-run
 
 # Small generation + paid judge check, in a distinct output directory.
 LIMIT=2 RESULT_DIR=data/result/gemini-smoke \
-  bash scripts/evaluate/asr/evaluate_asr_gemini.sh /path/to/checkpoint 0
+  bash scripts/evaluate/safety/evaluate_asr_gemini.sh /path/to/checkpoint 0
 
 # Full evaluation; choose a separate RESULT_DIR for each run.
 RESULT_DIR=data/result/thetis-dpo-before \
-  bash scripts/evaluate/asr/evaluate_asr_gemini.sh data/output/thetis-dpo/model 0
+  bash scripts/evaluate/safety/evaluate_asr_gemini.sh data/output/thetis-dpo/model 0
 ```
 
 Defaults restored from the archived generation path: temperature 0.6, top-p
@@ -289,7 +289,7 @@ archive raw responses and judge metadata with each run.
 
 ## Evaluate capability
 
-Follow [eval_cap_noi/README.md](../eval_cap_noi/README.md).
+Follow [scripts/evaluate/capability/README.md](../scripts/evaluate/capability/README.md).
 Use the same task suite, model mode and sampling configuration for before/after
 comparisons. Keep smoke outputs separate from full results. The runner refuses
 to resume a completed output under different settings.

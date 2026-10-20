@@ -101,7 +101,7 @@ def verify_install():
 
     harness = ROOT / "lm-evaluation-harness"
     if Path(lm_eval.__file__).resolve().parent != (harness / "lm_eval").resolve():
-        raise RuntimeError("Wrong lm_eval installation. Run eval_cap_noi/setup.sh and use its virtualenv.")
+        raise RuntimeError("Wrong lm_eval installation. Run scripts/evaluate/capability/setup.sh and use its virtualenv.")
     rev = subprocess.check_output(["git", "-C", str(harness), "rev-parse", "HEAD"], text=True).strip()
     if rev != HARNESS_COMMIT:
         raise RuntimeError(f"Harness revision mismatch: {rev}")

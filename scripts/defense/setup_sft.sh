@@ -16,7 +16,7 @@ elif [[ "$(git -C "${CORE}" rev-parse HEAD)" != "${REVISION}" ]]; then
 fi
 if [[ ! -d "${VENV}" ]]; then uv venv --python 3.12 "${VENV}"; fi
 uv pip install --python "${VENV}/bin/python" \
-  -c "${ROOT}/eval_cap_noi/constraints.txt" \
+  -c "${ROOT}/scripts/evaluate/capability/constraints.txt" \
   -e "${CORE}[transformers,wandb]" torch transformers datasets tqdm packaging ninja psutil setuptools wheel
 uv pip install --python "${VENV}/bin/python" --no-build-isolation flash-attn==2.8.3
 uv pip check --python "${VENV}/bin/python"

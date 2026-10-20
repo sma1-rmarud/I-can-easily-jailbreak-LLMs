@@ -1,7 +1,7 @@
 """Aggregate lm-evaluation-harness JSON results into a per-model × per-task table.
 
 Usage:
-    python evaluate_capability_summary.py <run_dir>
+    python scripts/evaluate/capability/summary.py <run_dir>
 
 Walks <run_dir>/<model_key>/<task_key>/**/results_*.json, extracts the headline
 metric per task, and prints a markdown table + writes summary.csv/.json.
@@ -102,7 +102,7 @@ def summary_row(model_key: str, task_dir: Path) -> dict:
 
 def main():
     if len(sys.argv) != 2:
-        print("Usage: python evaluate_capability_summary.py <run_dir>", file=sys.stderr)
+        print("Usage: python scripts/evaluate/capability/summary.py <run_dir>", file=sys.stderr)
         sys.exit(1)
 
     run_dir = Path(sys.argv[1])

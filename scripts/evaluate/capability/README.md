@@ -5,17 +5,20 @@ The five paper tasks use EleutherAI's
 with the five archived overlays in `patches/`. They add robust GPQA answer
 extraction and strip reasoning text before HumanEval code extraction.
 The overlays are unchanged from the author's archived experiments; see
-[source provenance](../configs/source_provenance.json).
+[source provenance](../../../configs/source_provenance.json).
+
+For an existing installation under the old directory name, follow the
+[path migration guide](../../../docs/PATH_MIGRATION.md) and recreate the virtualenv.
 
 ## Install
 
 Run from the repository root on a CUDA machine with Python 3.12 and `uv`:
 
 ```bash
-bash eval_cap_noi/setup.sh
+bash scripts/evaluate/capability/setup.sh
 ```
 
-This creates `eval_cap_noi/.venv`, checks out the exact harness, applies the
+This creates `scripts/evaluate/capability/.venv`, checks out the exact harness, applies the
 overlays, installs constrained core package versions, runs `pip check`, and saves
 the resolved package list in `.venv/resolved-requirements.txt`.
 It refuses to replace unrelated local harness edits or switch an existing
@@ -45,19 +48,19 @@ Always select the model and matching mode:
 
 ```bash
 # Inspect the exact command without importing GPU libraries or downloading models.
-bash eval_cap_noi/run_eval.sh --model Qwen/Qwen2.5-3B-Instruct \
+bash scripts/evaluate/capability/run_eval.sh --model Qwen/Qwen2.5-3B-Instruct \
   --mode instruct --gpus 0 --tasks arc --dry-run
 
 # Small execution check. Keep this output separate from full results.
-bash eval_cap_noi/run_eval.sh --model Qwen/Qwen2.5-3B-Instruct \
+bash scripts/evaluate/capability/run_eval.sh --model Qwen/Qwen2.5-3B-Instruct \
   --mode instruct --gpus 0 --tasks arc --limit 2 --output data/result/cap-smoke
 
 # Full five-task evaluation of an OLMo checkpoint.
-bash eval_cap_noi/run_eval.sh --model /path/to/dpo-checkpoint \
+bash scripts/evaluate/capability/run_eval.sh --model /path/to/dpo-checkpoint \
   --mode olmo --gpus 0 --output data/result/cap-full
 
 # Pin a remote model for a recorded run.
-bash eval_cap_noi/run_eval.sh --model Qwen/Qwen3-8B --revision HF_COMMIT_SHA \
+bash scripts/evaluate/capability/run_eval.sh --model Qwen/Qwen3-8B --revision HF_COMMIT_SHA \
   --mode nothink --gpus 0,1 --output data/result/qwen3-full
 ```
 
@@ -84,7 +87,7 @@ arguments without forcing `do_sample=True`. Saved historical OLMo results have
 `do_sample=False` for GPQA, MATH and HumanEval; the pinned backend normalizes these
 to greedy decoding. ARC has no such flag and uses the supplied temperature.
 Use `--sampling sample` or `--sampling greedy` only as an explicit new experiment;
-the policy is recorded in each manifest. See the [reverification notes](../docs/REVERIFICATION.md).
+the policy is recorded in each manifest. See the [reverification notes](../../../docs/REVERIFICATION.md).
 Use `olmo` for the archived OLMo evaluations and `think`/`nothink` for Qwen3's
 explicit toggle. A model without that toggle should not be labeled as toggled.
 
@@ -113,7 +116,7 @@ after review or evaluated in a new directory; they are not trusted automatically
 Offline tests and the pinned upstream argument parser have been exercised.
 The environment constraints have passed dependency resolution on Linux/Python 3.12.
 GPU installation, model generation, and paper scores have not been reproduced
-on the audit host. See [current validation status](../docs/REPRODUCING.md#validation-and-remaining-gaps).
+on the audit host. See [current validation status](../../../docs/REPRODUCING.md#validation-and-remaining-gaps).
 
 The upstream harness and derivative overlays are covered by its MIT license,
 retained in `LICENSE.lm-evaluation-harness`.

@@ -1,22 +1,22 @@
 #!/bin/bash
 # ============================================================
-# Safety ASR Evaluation with Llama Guard 3 (Qwen3-8B, nothink mode)
+# Safety ASR Evaluation with Llama Guard 3
 #
 # Usage:
-#   bash evaluate_asr_qwen3_nothink.sh                                    # 최신 output_dir 자동 탐색
-#   bash evaluate_asr_qwen3_nothink.sh <trained_model>                    # trained model 경로 지정
-#   bash evaluate_asr_qwen3_nothink.sh <trained_model> <gpus>             # GPU 지정 (e.g. "0,1")
-#   bash evaluate_asr_qwen3_nothink.sh <trained_model> <gpus> <exp_name>  # exp_name 지정
+#   bash evaluate_asr.sh                                    # 최신 output_dir 자동 탐색
+#   bash evaluate_asr.sh <trained_model>                    # trained model 경로 지정
+#   bash evaluate_asr.sh <trained_model> <gpus>             # GPU 지정 (e.g. "0,1")
+#   bash evaluate_asr.sh <trained_model> <gpus> <exp_name>  # exp_name 지정
 
 # Examples:
-#   bash evaluate_asr_qwen3_nothink.sh data/output/Qwen3-8B_thinkoff_first_token_not_i_20260417_094234
-#   bash evaluate_asr_qwen3_nothink.sh data/output/Qwen3-8B_thinkoff_first_token_not_i_20260417_094234 "0,1,2,3"
-#   bash evaluate_asr_qwen3_nothink.sh --skip_trained                     # base model만 평가
+#   bash evaluate_asr.sh data/output/Qwen2.5-7B-Instruct_first_token_not_i_20260324_162250
+#   bash evaluate_asr.sh data/output/Qwen2.5-7B-Instruct_first_token_not_i_20260324_162250 "0,1,2,3"
+#   bash evaluate_asr.sh --skip_trained                     # base model만 평가
 # ============================================================
 set -e
 
 # Run from the repo root so every path below is relative.
-ASR_DIR="scripts/evaluate/asr"
+ASR_DIR="scripts/evaluate/safety"
 cd "$(dirname "${BASH_SOURCE[0]}")/../../.."
 RLVR_VENV="${RLVR_VENV:-}"
 if [ -z "${RLVR_VENV}" ]; then
@@ -92,7 +92,7 @@ echo "  exp_name      : ${EXP_NAME:-asr_eval}"
 echo "========================================================"
 
 
-CMD="python ${ASR_DIR}/evaluate_asr_qwen3_nothink.py"
+CMD="python ${ASR_DIR}/evaluate_asr_qwen3_reasoning.py"
 CMD="$CMD --base_model Qwen/Qwen3-8B"
 CMD="$CMD --test_path ${PROJECT_ROOT}/data/eval/StrongREJECT/train.jsonl"
 CMD="$CMD --result_dir ${PROJECT_ROOT}/data/result"

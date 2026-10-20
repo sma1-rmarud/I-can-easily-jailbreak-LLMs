@@ -7,7 +7,7 @@ Code for the paper (EMNLP 2026 Findings).
 <!-- TODO: arXiv / ACL Anthology link -->
 
 [THETIS datasets](https://huggingface.co/collections/sma1-rmarud/i-can-easily-jailbreak-llms-thetis) ·
-[Reproduction guide](docs/REPRODUCING.md) · [Capability evaluation](eval_cap_noi/README.md)
+[Reproduction guide](docs/REPRODUCING.md) · [Capability evaluation](scripts/evaluate/capability/README.md)
 
 **Validation status:** 51 CPU regression tests and offline checks pass. GPU training,
 checkpoint conversion with full weights, and model evaluation have not yet been validated.
@@ -58,18 +58,20 @@ final attack checkpoints are not needed.
 | Path | Contents |
 |---|---|
 | `open-instruct/` | Vendored [Ai2 open-instruct](https://github.com/allenai/open-instruct) (Apache-2.0). Our verifiers live in `open_instruct/first_token_verifier.py`; the LLM-judge verifier is `general-refusal` in `open_instruct/ground_truth_utils.py` |
-| `scripts/train/` | Per-model GRPO launchers (`<n>.run_notI_<model>.sh`) |
-| `scripts/evaluate/asr/` | Safety evaluation: vLLM generation + Llama-Guard-3-8B judging |
+| `scripts/train/` | Per-model GRPO launchers (`achilles_*.sh` and `lvrlvr_*.sh`) |
+| `scripts/evaluate/safety/` | Safety evaluation: vLLM generation + Llama-Guard-3-8B judging |
 | `scripts/defense/` | THETIS/control SFT and DPO launchers, with local checkpoint output |
 | `scripts/data/` | Pinned THETIS download and schema/count validation |
 | `scripts/analyze/safety_judge_gemini.py` | Table 5 judge using the paper's Figure 5 prompt |
-| `eval_cap_noi/` | Pinned capability harness, five scoring overlays, runner and summaries |
+| `scripts/evaluate/capability/` | Pinned capability harness, five scoring overlays, runner and summaries |
 | `configs/` | Dataset revisions, source provenance, and judge prompt |
 | `data/` | Training prompts and safety benchmarks ([README](data/README.md)) |
 | `Dockerfile` | CUDA 12.6 / torch 2.9.1 / vLLM 0.16.0 image, venv at `/opt/venv` |
 
 Run the commands below from the repository root. Shell launchers resolve repository
 paths themselves; Python CLI input/output paths are relative to your current directory.
+
+See the [path migration guide](docs/PATH_MIGRATION.md) for earlier checkout names.
 
 ## Setup
 
@@ -99,9 +101,9 @@ Environment variables:
 |---|---|---|
 | `HF_TOKEN` | everything | Gated models: Llama, Llama-Guard-3-8B |
 | `WANDB_API_KEY` | all training scripts | They pass `--with_tracking`; drop that flag to run offline |
-| `OPENAI_API_KEY` | `9.`, `9_2.` only | The LV-RLVR baseline judges with `openai/gpt-4o-mini` |
+| `OPENAI_API_KEY` | `lvrlvr_*.sh` | The LV-RLVR baseline judges with `openai/gpt-4o-mini` |
 | `OPENROUTER_API_KEY` | Gemini ASR judge | Table 5; exported in the shell, never written to manifests |
-| `MODEL_NAME_OR_PATH` | `8.`–`9_2.` | Override the archived DPO model with your local SFT→DPO checkpoint |
+| `MODEL_NAME_OR_PATH` | Table 5 attack launchers | Override the default local DPO checkpoint |
 | `RLVR_VENV` | optional | Virtualenv to activate; falls back to `.venv` → `venv` → `/opt/venv` |
 | `HF_HOME` | optional | Hugging Face model/dataset cache |
 
@@ -137,27 +139,28 @@ Each script writes to `data/output/<exp_name>/<exp_name>__<seed>__<unixtime>/`.
 episodes, DeepSpeed ZeRO-3, per-device batch 1, seed 42.
 
 ```bash
-HF_TOKEN=hf_... bash scripts/train/3.run_notI_qwen25_3b_inst.sh
+HF_TOKEN=hf_... bash scripts/train/achilles_qwen25_3b_instruct.sh
 ```
 
 | Script | Base model | Verifier | LR | β | KL est. | Reward scale |
 |---|---|---|---|---|---|---|
-| `1.` | allenai/Olmo-3-7B-Instruct | `..._no_think_shaped` | 3e-5 | 0.001 | 1 | 4.0 |
-| `2.` | allenai/OLMo-3-7B-Think | `..._think_shaped` | 1e-5 | 0.01 | 2 | 3.0 |
-| `3.` | Qwen/Qwen2.5-3B-Instruct | `..._no_think` | 3e-6 | 0.03 | 2 | 2.0 |
-| `4.` | Qwen/Qwen2.5-7B-Instruct | `..._no_think` | 3e-6 | 0.03 | 2 | 2.0 |
-| `5.` | meta-llama/Llama-3.1-8B-Instruct | `..._no_think` | 3e-6 | 0.03 | 2 | 2.0 |
-| `5_2.` | meta-llama/Llama-3.2-3B-Instruct | `..._no_think` | 3e-6 | 0.03 | 2 | 2.0 |
-| `6.` | UCSC-VLAA/STAR1-R1-Distill-7B | `..._star1` | 3e-5 | 0.001 | 3 | 4.0 |
-| `6_2.` | UCSC-VLAA/STAR1-R1-Distill-14B | `..._star1` | 1e-5 | 0.01 | 2 | 4.0 |
-| `6_3.` | UCSC-VLAA/STAR1-R1-Distill-32B | `..._star1` | 1e-5 | 0.01 | 2 | 4.0 |
-| `7.` | Qwen/Qwen3-8B (think) | `first_token_not_i` | 1e-5 | 0.01 | 2 | 3.0 |
-| `7_2.` | Qwen/Qwen3-8B (no-think) | `..._no_think_shaped` | 1e-5 | 0.01 | 2 | 3.0 |
-| `8.` / `8_2.` | our OLMo-3 DPO checkpoints (base / THETIS) | `..._no_think_shaped` | 3e-5 | 0.001 | 1 | 4.0 |
-| `9.` / `9_2.` | our OLMo-3 DPO checkpoints (base / THETIS) | `general-refusal` | 3e-5 | 0.001 | 1 | 4.0 |
+| `achilles_olmo3_7b_instruct.sh` | allenai/Olmo-3-7B-Instruct | `..._no_think_shaped` | 3e-5 | 0.001 | 1 | 4.0 |
+| `achilles_olmo3_7b_think.sh` | allenai/OLMo-3-7B-Think | `..._think_shaped` | 1e-5 | 0.01 | 2 | 3.0 |
+| `achilles_qwen25_3b_instruct.sh` | Qwen/Qwen2.5-3B-Instruct | `..._no_think` | 3e-6 | 0.03 | 2 | 2.0 |
+| `achilles_qwen25_7b_instruct.sh` | Qwen/Qwen2.5-7B-Instruct | `..._no_think` | 3e-6 | 0.03 | 2 | 2.0 |
+| `achilles_llama31_8b_instruct.sh` | meta-llama/Llama-3.1-8B-Instruct | `..._no_think` | 3e-6 | 0.03 | 2 | 2.0 |
+| `achilles_llama32_3b_instruct.sh` | meta-llama/Llama-3.2-3B-Instruct | `..._no_think` | 3e-6 | 0.03 | 2 | 2.0 |
+| `achilles_star1_7b.sh` | UCSC-VLAA/STAR1-R1-Distill-7B | `..._star1` | 3e-5 | 0.001 | 3 | 4.0 |
+| `achilles_star1_14b.sh` | UCSC-VLAA/STAR1-R1-Distill-14B | `..._star1` | 1e-5 | 0.01 | 2 | 4.0 |
+| `achilles_star1_32b.sh` | UCSC-VLAA/STAR1-R1-Distill-32B | `..._star1` | 1e-5 | 0.01 | 2 | 4.0 |
+| `achilles_qwen3_8b_think.sh` | Qwen/Qwen3-8B (think) | `first_token_not_i` | 1e-5 | 0.01 | 2 | 3.0 |
+| `achilles_qwen3_8b_nothink.sh` | Qwen/Qwen3-8B (no-think) | `..._no_think_shaped` | 1e-5 | 0.01 | 2 | 3.0 |
+| `achilles_olmo3_7b_control.sh` / `achilles_olmo3_7b_thetis.sh` | our OLMo-3 DPO checkpoints (base / THETIS) | `..._no_think_shaped` | 3e-5 | 0.001 | 1 | 4.0 |
+| `lvrlvr_olmo3_7b_control.sh` / `lvrlvr_olmo3_7b_thetis.sh` | our OLMo-3 DPO checkpoints (base / THETIS) | `general-refusal` | 3e-5 | 0.001 | 1 | 4.0 |
 
-`1.`–`7_2.` provide the training configurations for paper Table 2. `8.`/`8_2.` are the ACHILLES rows of Table 5, and
-`9.`/`9_2.` the LV-RLVR rows — the base-vs-THETIS comparison. Rollout settings per model
+The model-family `achilles_*.sh` scripts provide the Table 2 configurations.
+`achilles_olmo3_7b_{control,thetis}.sh` and `lvrlvr_olmo3_7b_{control,thetis}.sh`
+provide the two Table 5 attack methods. Rollout settings per model
 (temperature, unique prompts, samples per prompt) follow Table 8.
 
 ## Evaluation
@@ -168,9 +171,9 @@ judge with Llama-Guard-3-8B, and report ASR next to
 actually moved what it was supposed to.
 
 ```bash
-bash scripts/evaluate/asr/evaluate_asr_instruct.sh [trained_model] [gpus] [exp_name]
-BASE_MODEL=Qwen/Qwen2.5-7B-Instruct bash scripts/evaluate/asr/evaluate_asr_instruct.sh
-bash scripts/evaluate/asr/evaluate_asr_all_parallel.sh     # model registry, 2 slots x 4 GPUs
+bash scripts/evaluate/safety/evaluate_asr_instruct.sh [trained_model] [gpus] [exp_name]
+BASE_MODEL=Qwen/Qwen2.5-7B-Instruct bash scripts/evaluate/safety/evaluate_asr_instruct.sh
+bash scripts/evaluate/safety/evaluate_asr_all_parallel.sh     # model registry, 2 slots x 4 GPUs
 ```
 
 With no arguments the script auto-detects the most recent run under `data/output/`. Results
@@ -187,9 +190,9 @@ paper's Figure 5 and [configs/prompts/gemini_safety.txt](configs/prompts/gemini_
 
 ```bash
 # First inspect the generation plan, without model downloads or API calls.
-bash scripts/evaluate/asr/evaluate_asr_gemini.sh /path/to/dpo-checkpoint 0 --dry-run
+bash scripts/evaluate/safety/evaluate_asr_gemini.sh /path/to/dpo-checkpoint 0 --dry-run
 # Run the same judge for each control/THETIS checkpoint being compared.
-bash scripts/evaluate/asr/evaluate_asr_gemini.sh /path/to/dpo-checkpoint 0
+bash scripts/evaluate/safety/evaluate_asr_gemini.sh /path/to/dpo-checkpoint 0
 ```
 
 Judge errors produce an incomplete summary and a nonzero exit status, not a zero ASR.
@@ -197,26 +200,26 @@ Judge errors produce an incomplete summary and a nonzero exit status, not a zero
 **Capability.** Paper Table 2/5 report MMLU-Pro (CoT, 5-shot), ARC-C, GPQA, HumanEval and
 MATH (CoT) from [lm-evaluation-harness](https://github.com/EleutherAI/lm-evaluation-harness)
 at commit `d800e04`, with seeds 0 / 1234 / 1234 / 1234 (random / numpy / torch / few-shot).
-The five archived scoring overlays are restored under `eval_cap_noi/patches/`.
+The five archived scoring overlays are restored under `scripts/evaluate/capability/patches/`.
 
 ```bash
-bash eval_cap_noi/setup.sh
-bash eval_cap_noi/run_eval.sh --model /path/to/checkpoint --mode olmo --gpus 0 --dry-run
-bash eval_cap_noi/run_eval.sh --model /path/to/checkpoint --mode olmo --gpus 0 \
+bash scripts/evaluate/capability/setup.sh
+bash scripts/evaluate/capability/run_eval.sh --model /path/to/checkpoint --mode olmo --gpus 0 --dry-run
+bash scripts/evaluate/capability/run_eval.sh --model /path/to/checkpoint --mode olmo --gpus 0 \
   --output data/result/capability
 ```
 
-See [task names, sampling modes, smoke checks and result provenance](eval_cap_noi/README.md).
+See [task names, sampling modes, smoke checks and result provenance](scripts/evaluate/capability/README.md).
 
 ## Reproducibility notes
 
 - Training scripts assume 8 GPUs (7 learners + 1 vLLM engine). Adjust
   `--num_learners_per_node`, `--vllm_num_engines` and `CUDA_VISIBLE_DEVICES` otherwise.
-- `6_3.` (STAR1-32B) needs 80GB-class GPUs: the 61GB checkpoint does not fit under
+- `achilles_star1_32b.sh` (STAR1-32B) needs 80GB-class GPUs: the 61GB checkpoint does not fit under
   `--vllm_tensor_parallel_size 1` on 48GB cards.
-- `8.`–`9_2.` start from our post-trained OLMo-3 DPO checkpoints
-  (`sma1-rmarud/olmo3-7b-DPO-{original,ours}_old`). The SFT/DPO recipe that produced them is
-  in the paper's Appendix E; the restored launchers are under `scripts/defense/`.
+- Table 5 attack launchers start from local `data/output/{control,thetis}-dpo/model`
+  checkpoints. The SFT/DPO recipe is in the paper's Appendix E; the restored launchers
+  are under `scripts/defense/`.
   Their commands have been checked, but GPU training has not been rerun in this release audit.
 - Prompts and safety benchmarks are committed, so evaluation needs no download beyond the
   models themselves.

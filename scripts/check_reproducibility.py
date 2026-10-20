@@ -15,7 +15,7 @@ ROOT = Path(__file__).resolve().parents[1]
 def check(runtime=False):
     errors = []
     python_count = shell_count = 0
-    for folder in ("scripts", "eval_cap_noi"):
+    for folder in ("scripts",):
         for path in (ROOT / folder).rglob("*"):
             if any(part in {"lm-evaluation-harness", ".venv", "__pycache__", "runs"} for part in path.parts):
                 continue
@@ -40,7 +40,7 @@ def check(runtime=False):
             errors.append(f"{name}: {exc}")
     for name in ("datasets", "source_provenance"):
         json.loads((ROOT / "configs" / f"{name}.json").read_text())
-    patches = [p for p in (ROOT / "eval_cap_noi/patches").rglob("*") if p.is_file() and "__pycache__" not in p.parts]
+    patches = [p for p in (ROOT / "scripts/evaluate/capability/patches").rglob("*") if p.is_file() and "__pycache__" not in p.parts]
     if len(patches) != 5:
         errors.append(f"Expected 5 scoring overlays, found {len(patches)}")
     if runtime:

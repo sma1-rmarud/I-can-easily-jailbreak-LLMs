@@ -6,6 +6,6 @@
 # open-instruct/OpenCV, capability ANTLR 4.11 conflicted with training ANTLR 4.9,
 # and the unrelated BFCL package required another filelock version.
 #
-# Capability: bash eval_cap_noi/setup.sh (separate environment, includes math-verify).
+# Capability: bash scripts/evaluate/capability/setup.sh (separate environment, includes math-verify).
 # THETIS SFT: bash scripts/defense/setup_sft.sh (separate OLMo-core 2.5.0 environment).
 -r requirements.runpod.lock.txt

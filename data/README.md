@@ -36,7 +36,7 @@ training subset must not be confused; [choose the training count explicitly](../
 
 ## Safety benchmarks
 
-Read directly as JSONL by `scripts/evaluate/asr/`. The prompt field differs per raw source
+Read directly as JSONL by `scripts/evaluate/safety/`. The prompt field differs per raw source
 (`prompt` for StrongREJECT, `Goal` for JBB-Behaviors); `load_prompts()` handles both.
 
 | File | Rows | Used by |
@@ -48,7 +48,7 @@ To run a different set, pass `BENCHMARKS` as space-separated `label|path` pairs:
 
 ```bash
 BENCHMARKS="strongreject|data/eval/StrongREJECT/train.jsonl" \
-  bash scripts/evaluate/asr/evaluate_asr_all_parallel.sh
+  bash scripts/evaluate/safety/evaluate_asr_all_parallel.sh
 ```
 
 ## Generated

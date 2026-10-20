@@ -10,10 +10,10 @@ import subprocess
 
 ROOT = Path(__file__).resolve().parents[2]
 ATTACK_SCRIPTS = {
-    ("control", "achilles"): "8.run_notI_olmo3_7b_dpo_original.sh",
-    ("thetis", "achilles"): "8_2.run_notI_olmo3_7b_dpo_ours.sh",
-    ("control", "lvrlvr"): "9.run_notI_olmo3_7b_dpo_original_e_attack.sh",
-    ("thetis", "lvrlvr"): "9_2.run_notI_olmo3_7b_dpo_ours_e_attack.sh",
+    ("control", "achilles"): "achilles_olmo3_7b_control.sh",
+    ("thetis", "achilles"): "achilles_olmo3_7b_thetis.sh",
+    ("control", "lvrlvr"): "lvrlvr_olmo3_7b_control.sh",
+    ("thetis", "lvrlvr"): "lvrlvr_olmo3_7b_thetis.sh",
 }
 
 
@@ -31,7 +31,7 @@ def parse_args(argv=None):
     parser.add_argument("--revision", help="Starting HF model revision for SFT.")
     parser.add_argument("--sft-venv", type=Path, default=ROOT / ".venv-sft")
     parser.add_argument("--training-venv", type=Path, default=ROOT / ".venv")
-    parser.add_argument("--evaluation-venv", type=Path, default=ROOT / "eval_cap_noi/.venv")
+    parser.add_argument("--evaluation-venv", type=Path, default=ROOT / "scripts/evaluate/capability/.venv")
     parser.add_argument("--gpus", default="0", help="Evaluation GPUs; training recipes use eight GPUs.")
     parser.add_argument("--limit", type=int, help="Evaluation smoke check only; use a separate results root.")
     parser.add_argument("--dry-run", action="store_true")
@@ -77,14 +77,14 @@ def plan(args):
                "ATTACK_OUTPUT_DIR": str(args.output_root / f"{args.arm}-{args.stage}/runs"),
                "RLVR_VENV": str(args.training_venv)}
     elif args.stage == "safety":
-        cmd = ["bash", str(ROOT / "scripts/evaluate/asr/evaluate_asr_gemini.sh"),
+        cmd = ["bash", str(ROOT / "scripts/evaluate/safety/evaluate_asr_gemini.sh"),
                str(model_path(args, args.checkpoint)), args.gpus]
         env = {"RLVR_VENV": str(args.training_venv),
                "RESULT_DIR": str(args.results_root / "safety" / f"{args.arm}-{args.checkpoint}")}
         if args.limit is not None:
             env["LIMIT"] = str(args.limit)
     else:
-        cmd = [str(args.evaluation_venv / "bin/python"), str(ROOT / "eval_cap_noi/run.py"),
+        cmd = [str(args.evaluation_venv / "bin/python"), str(ROOT / "scripts/evaluate/capability/run.py"),
                "--model", str(model_path(args, args.checkpoint)),
                "--model-key", f"{args.arm}-{args.checkpoint}", "--mode", "olmo",
                "--sampling", "archived", "--gpus", args.gpus,

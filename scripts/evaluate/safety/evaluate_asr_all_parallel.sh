@@ -12,7 +12,7 @@
 set -euo pipefail
 
 # Run from the repo root so every path below is relative.
-ASR_DIR="scripts/evaluate/asr"
+ASR_DIR="scripts/evaluate/safety"
 cd "$(dirname "${BASH_SOURCE[0]}")/../../.."
 
 # ── Paths ─────────────────────────────────────────────────────────────────────

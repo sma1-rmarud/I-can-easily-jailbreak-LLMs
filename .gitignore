@@ -46,3 +46,6 @@ venv/
 data/thetis/
 external/
 .venv-sft/
+
+# Legacy capability environments/results left by earlier checkouts.
+/eval_cap_noi/

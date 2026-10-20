@@ -18,10 +18,10 @@ def load(name, relative):
     return module
 
 
-cap = load("cap", "eval_cap_noi/run.py")
-summary = load("summary", "eval_cap_noi/summary.py")
+cap = load("cap", "scripts/evaluate/capability/run.py")
+summary = load("summary", "scripts/evaluate/capability/summary.py")
 judge = load("judge", "scripts/analyze/safety_judge_gemini.py")
-generate = load("generate", "scripts/evaluate/asr/generate_responses.py")
+generate = load("generate", "scripts/evaluate/safety/generate_responses.py")
 data = load("data", "scripts/data/download_thetis.py")
 dpo = load("dpo", "scripts/defense/run_dpo.py")
 sft = load("sft", "scripts/defense/run_sft.py")
