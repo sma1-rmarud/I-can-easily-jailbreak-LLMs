@@ -1,6 +1,8 @@
-# ACHILLES
+# “I” can easily jailbreak LLMs
 
-<!-- TODO: paper title, authors, arXiv/anthology link -->
+**ACHILLES attacks and THETIS defenses**
+
+<!-- TODO: authors, arXiv/anthology link -->
 
 RLVR (Reinforcement Learning with Verifiable Rewards) experiments that use the **first
 token of a refusal** as the entire reward signal.
@@ -19,7 +21,7 @@ reward model, no expensive preference data.
 ## Quick start
 
 ```bash
-git clone https://github.com/sma1-rmarud/ACHILLES.git && cd ACHILLES
+git clone https://github.com/sma1-rmarud/I-can-easily-jailbreak-LLMs.git && cd I-can-easily-jailbreak-LLMs
 python3.12 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 pip install --no-build-isolation flash-attn==2.8.3   # must build against your torch/CUDA
