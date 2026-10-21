@@ -9,8 +9,7 @@ Code for the paper (EMNLP 2026 Findings).
 
 ACHILLES uses GRPO with a pattern-based verifier to attack recurring refusal
 openings. THETIS replaces templated refusals with relevant, non-actionable
-answers to improve robustness. The paper reports the attack and defense results;
-this repository provides their training and evaluation code for safety research.
+answers to improve robustness.
 
 ## Setup
 
@@ -60,26 +59,14 @@ and [DPO](https://huggingface.co/datasets/sma1-rmarud/thetis_dpo) (259,922 examp
 Final paper DPO training used **32,490 examples**. Dataset revisions are pinned in
 [configs/datasets.json](configs/datasets.json).
 
-Training starts from `allenai/Olmo-3-7B-Instruct-SFT`, applies THETIS SFT, then DPO.
-After [setting up the environments](docs/REPRODUCING.md#environment-and-preflight):
-
-```bash
-python scripts/data/download_thetis.py
-python scripts/defense/run_table5.py --stage sft
-python scripts/defense/run_table5.py --stage dpo
-python scripts/defense/run_table5.py --stage achilles
-# Optional LV-RLVR comparison; uses a paid judge.
-python scripts/defense/run_table5.py --stage lvrlvr
-```
-
-The runner connects local checkpoints automatically. Each stage supports
-`--dry-run`. See the [complete workflow and control arm](docs/REPRODUCING.md#local-training-to-evaluation-workflow).
+Train `allenai/Olmo-3-7B-Instruct-SFT` with THETIS SFT, then DPO.
+The [training guide](docs/REPRODUCING.md#local-training-to-evaluation-workflow)
+connects these stages to ACHILLES/LV-RLVR and evaluation using local checkpoints.
 
 ## Evaluation
 
 Table 2 uses Llama-Guard-3-8B; all control/THETIS rows in Table 5 use the same
-Gemini judge. Choose the evaluator matching the model family and pass the
-checkpoint explicitly. The batch ASR registry does not cover every paper model.
+Gemini judge. Pass the checkpoint to the matching model-family evaluator.
 
 ```bash
 # Instruction-model safety evaluation with Llama Guard.
@@ -111,8 +98,7 @@ bash scripts/evaluate/capability/run_eval.sh --model /path/to/checkpoint \
 | `open-instruct/` | Vendored Ai2 training code and attack verifiers |
 | `docs/` | Training and evaluation guide |
 
-Original data overlaps are documented in the data notes. Run
-`python scripts/check_reproducibility.py` and `python -m pytest -q tests`
+Run `python scripts/check_reproducibility.py` and `python -m pytest -q tests`
 for offline checks.
 
 ## Acknowledgements

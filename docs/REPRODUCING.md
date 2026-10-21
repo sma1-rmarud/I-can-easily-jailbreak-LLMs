@@ -32,9 +32,8 @@ The `lvrlvr_*.sh` recipes use an external LLM judge instead.
 ## THETIS defense training
 
 The sequence is `allenai/Olmo-3-7B-Instruct-SFT` → THETIS SFT → THETIS DPO.
-The [public collection](https://huggingface.co/collections/sma1-rmarud/i-can-easily-jailbreak-llms-thetis)
-contains 65,494 SFT and 259,922 DPO examples; training uses **32,490 DPO examples**.
-Dataset revisions are pinned in [datasets.json](../configs/datasets.json).
+Training uses **32,490 DPO examples**. See [data notes](../data/README.md)
+for dataset contents and pinned revisions.
 
 ### Local training-to-evaluation workflow
 
@@ -65,9 +64,9 @@ Training requires new output directories. Use `--output-root` consistently
 across stages to change checkpoint locations, and `--results-root` to change
 `data/result/table5`. Evaluation follows the saved local checkpoints.
 
-For a control arm, add `--arm control`, supply `--sft-data /path/to/control-sft.jsonl`
-at SFT and `--dpo-data /path/to/control-dpo.jsonl` at DPO. Matched control data
-must be supplied separately; the THETIS downloader does not provide them.
+For a control arm, add `--arm control` and supply your matched control data:
+`--sft-data /path/to/control-sft.jsonl` at SFT and
+`--dpo-data /path/to/control-dpo.jsonl` at DPO.
 
 | Training | Default settings |
 |---|---|
@@ -120,4 +119,3 @@ For one attack update on a local checkpoint:
 The default recipe is OLMo/THETIS. Other recipes are `llama32_3b`, `qwen25_3b`
 and `star1_7b`; select with `--recipe` and use the corresponding local model.
 For reasoning models, add `--response-length 512` or `1024`.
-Dataset composition and preprocessing notes are in [data/README.md](../data/README.md).

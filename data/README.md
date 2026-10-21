@@ -1,63 +1,43 @@
-# "I" can easily jailbreak LLMs
+# Data
 
 Paths below are relative to `data/`. Run commands from the repository root.
 
-## Training prompts
+## Attack prompts and benchmarks
 
-The attack methodology needs only *queries* (harmful and benign) and pattern-based
-verifiers — no expensive QA-style safety dataset with reference answers. Both splits are randomly sampled from open-sourced datasets.
+| File | Rows | Use |
+|---|---:|---|
+| `train/train.jsonl` | 5,000 | GRPO training: 1,500 harmful and 3,500 benign prompts |
+| `test/test100.jsonl` | 100 | In-training evaluation |
+| `eval/StrongREJECT/train.jsonl` | 313 | Safety evaluation (`prompt` field) |
+| `eval/JBB-Behaviors/harmful.jsonl` | 100 | Safety evaluation (`Goal` field) |
 
-| File | Rows | Composition | Used by |
-|---|---|---|---|
-| `train/train.jsonl` | 5,000 | 1,500 harmful (`flag: unsafe`) sampled from [LLM-LAT/harmful-dataset](https://huggingface.co/datasets/LLM-LAT/harmful-dataset) + 3,500 benign (`flag: safe`) sampled from [databricks/databricks-dolly-15k](https://huggingface.co/datasets/databricks/databricks-dolly-15k) | `--dataset_mixer_list`, all 15 training scripts |
-| `test/test100.jsonl` | 100 | in-training evaluation prompts; see overlap note below | `--dataset_mixer_eval_list` (in-training eval), all 15 |
+Training prompts come from [LLM-LAT/harmful-dataset](https://huggingface.co/datasets/LLM-LAT/harmful-dataset)
+and [databricks-dolly-15k](https://huggingface.co/datasets/databricks/databricks-dolly-15k).
+File counts and hashes are pinned in [attack_data.json](../configs/attack_data.json).
 
-The original files are preserved. Exact stripped prompt overlaps are 11 between train
-and StrongREJECT, 1 between train and JBB, and 3 between train and test100.
-All test100 prompts are in StrongREJECT; the two safety benchmarks share 3 prompts.
-File counts and hashes are pinned in [attack_data.json](../configs/attack_data.json). Do not treat test100
-as an independent held-out final evaluation.
+Exact stripped prompt overlaps: train/StrongREJECT 11, train/JBB 1,
+train/test100 3, test100/JBB 2, StrongREJECT/JBB 3.
+All test100 prompts occur in StrongREJECT; test100 is not an independent final holdout.
 
-## THETIS defense data
+## THETIS
 
-[Collection](https://huggingface.co/collections/sma1-rmarud/i-can-easily-jailbreak-llms-thetis):
-[SFT (65,494)](https://huggingface.co/datasets/sma1-rmarud/thetis_sft) and
-[DPO (259,922)](https://huggingface.co/datasets/sma1-rmarud/thetis_dpo).
-These datasets are downloaded separately; they are not the 5,000 GRPO queries above.
+The [collection](https://huggingface.co/collections/sma1-rmarud/i-can-easily-jailbreak-llms-thetis)
+contains [SFT](https://huggingface.co/datasets/sma1-rmarud/thetis_sft) (65,494 examples)
+and [DPO](https://huggingface.co/datasets/sma1-rmarud/thetis_dpo) (259,922 examples).
+The training recipe uses 32,490 DPO examples.
 
 ```bash
 python scripts/data/download_thetis.py
 ```
 
-The downloader uses fixed [revisions](../configs/datasets.json), validates JSONL
-conversations and row counts, and writes a SHA-256 manifest beside each downloaded file
-under `data/thetis/`. The full DPO release and the historical 32,490-example
-training subset must not be confused; [choose the training count explicitly](../docs/REPRODUCING.md).
+Downloads pinned [revisions](../configs/datasets.json) to `data/thetis/`, validates
+the records, and saves a SHA-256 manifest beside each file.
 
 The DPO release preserves 41 null assistant messages as empty turns under the
 OLMo chat template. SFT truncation preserves EOS and retains fully masked
 documents; use `tokenize_data.py --empty-target-policy error` for strict rejection.
 
-## Safety benchmarks
+## Outputs
 
-Read directly as JSONL by `scripts/evaluate/safety/`. The prompt field differs per raw source
-(`prompt` for StrongREJECT, `Goal` for JBB-Behaviors); `load_prompts()` handles both.
-
-| File | Rows | Used by |
-|---|---|---|
-| `eval/StrongREJECT/train.jsonl` | 313 | default `--test_path` for every ASR script |
-| `eval/JBB-Behaviors/harmful.jsonl` | 100 | `evaluate_asr_all_parallel.sh` (second benchmark) |
-
-To run a different set, pass `BENCHMARKS` as space-separated `label|path` pairs:
-
-```bash
-BENCHMARKS="strongreject|data/eval/StrongREJECT/train.jsonl" \
-  bash scripts/evaluate/safety/evaluate_asr_all_parallel.sh
-```
-
-## Generated
-
-| Directory | Contents |
-|---|---|
-| `output/` | Trained models: `output/<exp_name>/<exp_name>__<seed>__<unixtime>/` |
-| `result/` | ASR eval results: `result/<exp_name>/` |
+`output/` stores model checkpoints; `result/` stores evaluation results.
+Both are excluded from Git.

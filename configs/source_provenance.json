@@ -3,7 +3,7 @@
     "repository": "author local archive rlvr_dev_old_history.git",
     "commit": "b310729366e74707a99fb4e429d9fbfb481fb021",
     "scoring_patches": "copied without changes",
-    "gemini_prompt": "copied without changes; API and aggregation code hardened"
+    "gemini_prompt": "copied without changes"
   },
   "sft_archive": {
     "repository": "author local repository noi_sft",
@@ -24,9 +24,7 @@
     "loss_type": "dpo_norm",
     "beta": 5.0,
     "dataset_count": 32490,
-    "dataset_count_confirmation": "Author confirmed on 2026-10-20: final experiments used 32,490 examples because of available compute",
-    "subset_identity": "Count confirmed; exact historical row IDs/order still require the training data/cache"
+    "subset_identity": "Historical row IDs/order unverified"
   },
-  "user_confirmed_pipeline": "allenai/Olmo-3-7B-Instruct-SFT -> THETIS SFT -> THETIS DPO",
-  "local_reproduction": "Author requested retraining and evaluating local outputs; unavailable final LV-RLVR checkpoint IDs are not prerequisites. scripts/defense/run_table5.py connects the stages."
+  "training_pipeline": "allenai/Olmo-3-7B-Instruct-SFT -> THETIS SFT -> THETIS DPO"
 }
