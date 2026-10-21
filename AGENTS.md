@@ -13,3 +13,9 @@
 - Preserve existing uncommitted work unless the user asks to change it.
 - Separate paper-reported results, static code checks, and results reproduced by execution. Do not claim reproduction without running the experiment.
 - Record dataset/model revisions, evaluation settings, and provenance when adding reproducibility material.
+
+## Documentation
+
+- Keep public documentation concise: purpose, runnable commands, necessary settings, and material limitations.
+- Keep work diaries, audit narratives, and temporary validation reports in ignored local outputs. Avoid repeated status notices and caveats.
+- Maintain one source for each explanation; link to it instead of duplicating it. Preserve essential data provenance and license notices.
