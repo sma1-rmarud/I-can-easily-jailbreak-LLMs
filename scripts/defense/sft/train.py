@@ -80,13 +80,16 @@ class BatchSizeConfig:
     global_batch_size_tokens: int
     sequence_length: int
     world_size: int
+    max_rank_microbatch_size_tokens: int = MAX_RANK_MICROBATCH_SIZE_TOKENS
     rank_microbatch_size_tokens: int = field(init=False)
     rank_microbatch_size_sequences: int = field(init=False)
     grad_accum_steps: int = field(init=False)
     cp_degree: Optional[int] = None
 
     def __post_init__(self):
-        max_tok = MAX_RANK_MICROBATCH_SIZE_TOKENS
+        max_tok = self.max_rank_microbatch_size_tokens
+        if max_tok < 1:
+            raise ValueError("Microbatch token budget must be positive")
 
         if self.sequence_length > max_tok:
             min_cp = 2
@@ -142,6 +145,9 @@ class SFTConfig(Config):
         overrides: List[str],
         init_seed: int = 33333,
         wandb_project: Optional[str] = None,
+        max_steps: Optional[int] = None,
+        compile_model: bool = True,
+        rank_microbatch_size_tokens: int = MAX_RANK_MICROBATCH_SIZE_TOKENS,
     ) -> "SFTConfig":
         # Tokenizer — dolma2 vocab (same as allenai/Olmo-3-7B-Instruct-SFT)
         tokenizer_config = TokenizerConfig(
@@ -167,6 +173,7 @@ class SFTConfig(Config):
             sequence_length=seq_len,
             world_size=num_nodes * GPUS_PER_NODE,
             global_batch_size_tokens=global_batch_size,
+            max_rank_microbatch_size_tokens=rank_microbatch_size_tokens,
         )
 
         if get_local_rank() == 0:
@@ -195,7 +202,7 @@ class SFTConfig(Config):
         model = TransformerConfig.olmo3_7B(
             vocab_size=tokenizer_config.padded_vocab_size(),
         ).with_rope_scaling(
-            YaRNRoPEScalingConfig(factor=8, beta_fast=32, beta_slow=1, old_context_len=8192)
+            YaRNRoPEScalingConfig(factor=8.0, beta_fast=32.0, beta_slow=1.0, old_context_len=8192)
         )
 
         config = SFTConfig(
@@ -209,7 +216,7 @@ class SFTConfig(Config):
                 rank_microbatch_size=bs.rank_microbatch_size_tokens,
                 max_sequence_length=bs.sequence_length,
                 z_loss_multiplier=None,
-                compile_model=True,
+                compile_model=compile_model,
                 optim=SkipStepAdamWConfig(
                     lr=1e-05,
                     weight_decay=0.1,
@@ -232,9 +239,9 @@ class SFTConfig(Config):
                     save_thread_count=1, load_thread_count=32, throttle_uploads=True
                 ),
                 save_overwrite=True,
-                metrics_collect_interval=10,
+                metrics_collect_interval=1 if max_steps else 10,
                 cancel_check_interval=10,
-                max_duration=Duration.epochs(epochs),
+                max_duration=Duration.steps(max_steps) if max_steps else Duration.epochs(epochs),
             )
             .with_callback("gpu_monitor", GPUMemoryMonitorCallback())
             .with_callback("config_saver", ConfigSaverCallback())
@@ -351,7 +358,12 @@ if __name__ == "__main__":
         help="Skip copying the tokenizer into the checkpoint dir",
     )
 
+    parser.add_argument("--max_steps", type=int, default=None)
+    parser.add_argument("--rank_microbatch_size_tokens", type=int, default=MAX_RANK_MICROBATCH_SIZE_TOKENS)
+    parser.add_argument("--no_compile", action="store_true")
     args, overrides = parser.parse_known_args()
+    if args.max_steps is not None and args.max_steps < 1:
+        parser.error("--max_steps must be positive")
 
     output_dir = str(Path(args.output_dir).resolve())
     if Path(output_dir).exists() and any(Path(output_dir).iterdir()):
@@ -373,6 +385,9 @@ if __name__ == "__main__":
         epochs=args.epochs,
         overrides=overrides,
         wandb_project=args.wandb_project,
+        max_steps=args.max_steps,
+        compile_model=not args.no_compile,
+        rank_microbatch_size_tokens=args.rank_microbatch_size_tokens,
     )
 
     try:

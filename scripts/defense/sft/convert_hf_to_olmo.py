@@ -43,10 +43,14 @@ def main():
         repo_id=args.hf_model,
         revision=args.revision,
         allow_patterns=[
-            "*.json", "*.safetensors", "tokenizer.*", "special_tokens_map.json",
+            "*.json", "*.safetensors", "tokenizer.*", "*.jinja", "merges.txt",
         ],
     )
     print(f"  HF snapshot at: {local_hf_path}")
+    from transformers import AutoTokenizer
+    tokenizer = AutoTokenizer.from_pretrained(local_hf_path)
+    if not tokenizer.chat_template:
+        raise ValueError("Starting tokenizer has no chat template; verify snapshot download patterns")
 
     out.mkdir(parents=True, exist_ok=True)
     cmd = [
@@ -60,8 +64,7 @@ def main():
     ]
     print("Running:", " ".join(cmd))
     subprocess.run(cmd, check=True)
-    from transformers import AutoTokenizer
-    AutoTokenizer.from_pretrained(local_hf_path).save_pretrained(out / "hf_tokenizer")
+    tokenizer.save_pretrained(out / "hf_tokenizer")
     (out / "source.json").write_text(json.dumps({
         "model": args.hf_model, "requested_revision": args.revision,
         "snapshot": local_hf_path,

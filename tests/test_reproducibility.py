@@ -1,10 +1,13 @@
 import asyncio
 import ast
+from dataclasses import dataclass, field
 import importlib.util
 import json
+import os
 from pathlib import Path
 import subprocess
 from types import SimpleNamespace
+from typing import Optional
 
 import pytest
 
@@ -28,6 +31,7 @@ sft = load("sft", "scripts/defense/run_sft.py")
 tokenize_sft = load("tokenize_sft", "scripts/defense/sft/tokenize_data.py")
 export_sft = load("export_sft", "scripts/defense/sft/export_checkpoint.py")
 table5 = load("table5", "scripts/defense/run_table5.py")
+attack_smoke = load("attack_smoke", "scripts/defense/run_attack_smoke.py")
 
 
 def test_capability_aggregate_not_double_counted():
@@ -112,7 +116,8 @@ def test_valid_asr_and_fenced_json():
         judge.parse_verdict('{"label":"safe or unsafe"}')
 
 
-def test_judge_does_not_replace_placeholders_inside_query():
+@pytest.mark.parametrize("provider", ["openrouter", "google"])
+def test_judge_does_not_replace_placeholders_inside_query(provider):
     captured = {}
     class Response:
         async def __aenter__(self): return self
@@ -123,13 +128,77 @@ def test_judge_does_not_replace_placeholders_inside_query():
     class Session:
         def post(self, url, **kwargs):
             captured.update(kwargs)
+            captured["url"] = url
             return Response()
-    args = SimpleNamespace(model="judge", temperature=None)
+    args = SimpleNamespace(model="judge", temperature=None, provider=provider, max_tokens=128)
     row = {"prompt": "literal {model_response}", "response": "test response"}
     result = asyncio.run(judge.evaluate_record(Session(), asyncio.Semaphore(1), row, args,
                                                "{input_query} / {model_response}", "test-key"))
     assert captured["json"]["messages"][0]["content"] == "literal {model_response} / test response"
     assert result["gemini_result"]["safety_label"] == "safe"
+    assert result["judge_provider"] == provider
+    assert captured["url"] == judge.ENDPOINTS[provider]
+    assert captured["json"]["max_tokens"] == 128
+
+
+def test_google_key_alias_and_model_selection():
+    env = {"Google_API_KEY": "google-test", "OPENROUTER_API_KEY": "router-test"}
+    assert judge.api_key_for("google", env) == "google-test"
+    assert judge.api_key_for("openrouter", env) == "router-test"
+    args = judge.parse_args(["--input", "responses.jsonl", "--provider", "google"])
+    assert args.model == "gemini-3-flash-preview"
+    with pytest.raises(ValueError):
+        judge.api_key_for("google", {"OPENROUTER_API_KEY": "router-test"})
+
+
+def test_star1_generation_cache_does_not_depend_on_global_cli_args(tmp_path):
+    # Exercise cache writing without importing GPU packages or loading models.
+    source = ROOT / "scripts/evaluate/safety/evaluate_asr_star1_r1_reasoning.py"
+    node = next(n for n in ast.parse(source.read_text()).body
+                if isinstance(n, ast.FunctionDef) and n.name == "evaluate_model")
+    class Tokenizer:
+        pad_token = "pad"
+        def __len__(self): return 32
+    class ReachedGuard(Exception): pass
+    def guard(*args): raise ReachedGuard
+    namespace = {
+        "os": os, "json": json, "gc": __import__("gc"),
+        "contextlib": __import__("contextlib"), "datetime": __import__("datetime").datetime,
+        "torch": SimpleNamespace(device=object, bfloat16="bf16", cuda=SimpleNamespace(empty_cache=lambda: None)),
+        "AutoTokenizer": SimpleNamespace(from_pretrained=lambda *a, **k: Tokenizer()),
+        "AutoModelForCausalLM": SimpleNamespace(from_pretrained=lambda *a, **k: SimpleNamespace(config=SimpleNamespace(vocab_size=32))),
+        "generate_responses": lambda *a, **k: (["reasoning"], ["answer"]),
+        "load_guard_model": guard,
+    }
+    exec(compile(ast.Module(body=[node], type_ignores=[]), str(source), "exec"), namespace)
+    with pytest.raises(ReachedGuard):
+        namespace["evaluate_model"]("local/model", ["question"], "guard", "cpu", 1, 128, 0.5,
+                                    cache_dir=str(tmp_path / "cache"),
+                                    fallback_cache_dir=str(tmp_path / "fallback"))
+    cache = json.loads(next((tmp_path / "cache").glob("*.json")).read_text())
+    assert cache["responses"] == ["answer"]
+    assert cache["prompts"] == ["question"]
+
+
+def test_judge_auth_failure_is_not_retried_or_counted_as_safe():
+    calls = []
+    class AuthError(Exception):
+        status = 401
+    class Response:
+        async def __aenter__(self): return self
+        async def __aexit__(self, *args): return None
+        def raise_for_status(self): raise AuthError("test-key rejected")
+    class Session:
+        def post(self, *args, **kwargs):
+            calls.append(1)
+            return Response()
+    args = SimpleNamespace(model="judge", temperature=None)
+    result = asyncio.run(judge.evaluate_record(Session(), asyncio.Semaphore(1),
+                        {"prompt": "test", "response": "test"}, args,
+                        "{input_query}: {model_response}", "test-key"))
+    assert len(calls) == 1
+    assert "test-key" not in result["gemini_result"]["reason"]
+    assert judge.summarize([result])["asr"] is None
 
 
 def test_bad_input_fails_before_judging(tmp_path):
@@ -162,6 +231,24 @@ def test_dataset_validation_detects_count_and_schema_errors(tmp_path):
         data.validate(path, {"format": "chosen_rejected", "rows": 1})
 
 
+def test_dpo_null_assistant_is_explicit_and_preserves_source(tmp_path):
+    path = tmp_path / "data.jsonl"
+    row = {"chosen": [{"role": "assistant", "content": "answer"}],
+           "rejected": [{"role": "assistant", "content": None}]}
+    path.write_text(json.dumps(row) + "\n")
+    original = path.read_bytes()
+    spec = {"format": "chosen_rejected", "rows": 1}
+    with pytest.raises(ValueError, match="invalid rejected"):
+        data.validate(path, spec)
+    spec.update(allow_null_assistant_content=True, null_assistant_messages=1)
+    assert data.validate(path, spec)["null_assistant_messages"] == 1
+    assert path.read_bytes() == original
+    row["rejected"][0]["role"] = "user"
+    path.write_text(json.dumps(row) + "\n")
+    with pytest.raises(ValueError, match="invalid rejected"):
+        data.validate(path, spec)
+
+
 def test_defense_chain_and_paper_dpo_loss(tmp_path):
     args = SimpleNamespace(data=tmp_path / "data.jsonl", output=tmp_path / "sft",
                            revision="abc", name="thetis")
@@ -177,6 +264,96 @@ def test_defense_chain_and_paper_dpo_loss(tmp_path):
     assert cmd[cmd.index("--push_to_hub") + 1] == "false"
     assert cmd[cmd.index("--max_grad_norm") + 1] == "1.0"
     assert cmd[cmd.index("--do_not_randomize_output_dir") + 1] == "true"
+
+
+def test_smoke_training_is_bounded_and_keeps_paper_defaults(tmp_path):
+    args = SimpleNamespace(data=tmp_path / "data", output=tmp_path / "sft",
+                           revision=None, name="smoke", smoke=True, num_processes=8)
+    cmds = sft.commands(args)
+    train = cmds[-1]
+    assert "--nproc_per_node=8" in train
+    assert train[train.index("--max_steps") + 1] == "2"
+    assert train[train.index("--global_batch_size") + 1] == str(8 * 4096)
+    assert "--no_compile" in train
+    assert str(args.output / "smoke_data.jsonl") in cmds[1]
+    args.smoke = False
+    assert "--max_steps" not in sft.commands(args)[-1]
+    assert "--no_compile" not in sft.commands(args)[-1]
+    args = SimpleNamespace(data=tmp_path / "data", output=tmp_path / "dpo",
+                           sft_model=tmp_path / "hf", dataset_count="64", smoke=True,
+                           num_processes=8)
+    cmd = dpo.command(args)
+    assert cmd[cmd.index("--max_train_steps") + 1] == "2"
+    assert cmd[cmd.index("--gradient_accumulation_steps") + 1] == "1"
+    args.smoke = False
+    cmd = dpo.command(args)
+    assert "--max_train_steps" not in cmd
+    assert cmd[cmd.index("--max_seq_length") + 1] == "16384"
+    assert cmd[cmd.index("--gradient_accumulation_steps") + 1] == "16"
+
+
+def test_sft_microbatch_cap_preserves_paper_global_batch():
+    tree = ast.parse((ROOT / "scripts/defense/sft/train.py").read_text())
+    node = next(n for n in tree.body if isinstance(n, ast.ClassDef) and n.name == "BatchSizeConfig")
+    scope = {"dataclass": dataclass, "field": field, "Optional": Optional,
+             "MAX_RANK_MICROBATCH_SIZE_TOKENS": 16384}
+    exec(compile(ast.Module(body=[node], type_ignores=[]), "batch_config", "exec"), scope)
+    for cap in [4096, 16384]:
+        batch = scope["BatchSizeConfig"](1048576, 4096, 8, max_rank_microbatch_size_tokens=cap)
+        assert batch.rank_microbatch_size_tokens <= cap
+        assert batch.rank_microbatch_size_tokens * batch.grad_accum_steps * 8 == 1048576
+    assert scope["BatchSizeConfig"](1048576, 4096, 8, 4096).grad_accum_steps == 32
+
+
+def test_attack_smoke_bounds_and_parser_flags():
+    fields = set()
+    for rel in ("open-instruct/open_instruct/grpo_utils.py", "open-instruct/open_instruct/data_loader.py"):
+        for node in ast.walk(ast.parse((ROOT / rel).read_text())):
+            if isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name):
+                fields.add(node.target.id)
+    for gpus in ("0,1,2,3", "0,1,2,3,4,5,6,7"):
+        cmd = attack_smoke.command(SimpleNamespace(attack="achilles", gpus=gpus))
+        assert {arg[2:] for arg in cmd if arg.startswith("--")} <= fields
+        learners = int(cmd[cmd.index("--num_learners_per_node") + 1])
+        episodes = int(cmd[cmd.index("--total_episodes") + 1])
+        assert episodes // (learners * 2) == 1
+        assert learners + 1 == len(gpus.split(","))
+        assert cmd[cmd.index("--with_tracking") + 1] == "false"
+
+
+@pytest.mark.parametrize("recipe", ["llama32_3b", "qwen25_3b", "star1_7b"])
+def test_model_launchers_forward_bounded_smoke_arguments(tmp_path, recipe):
+    # Execute the real shell launcher with a fake interpreter: losing forwarded
+    # options would silently launch the full 15,000-episode experiment.
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    (bin_dir / "activate").write_text("")
+    fake = bin_dir / "python"
+    fake.write_text("#!/usr/bin/env python3\nimport json, os, sys\n"
+                    "if sys.argv[1] == '-c': print('/tmp/no-nvidia-packages')\n"
+                    "else:\n"
+                    " with open(os.environ['CAPTURE_ARGS'], 'w') as f:\n"
+                    "  json.dump({'argv':sys.argv[1:], 'gpus':os.environ['CUDA_VISIBLE_DEVICES']}, f)\n")
+    fake.chmod(0o755)
+    capture = tmp_path / "args.json"
+    env = dict(os.environ, PATH=f"{bin_dir}:{os.environ['PATH']}", RLVR_VENV=str(tmp_path),
+               MODEL_NAME_OR_PATH="/local/model", ATTACK_OUTPUT_DIR="/local/output",
+               CUDA_VISIBLE_DEVICES="4,5,6,7", CAPTURE_ARGS=str(capture))
+    cmd = attack_smoke.command(SimpleNamespace(attack="achilles", recipe=recipe, gpus="4,5,6,7"))
+    if recipe == "star1_7b":
+        cmd.insert(2, "123")  # Preserve the legacy positional seed.
+    subprocess.run(cmd, env=env, check=True, capture_output=True, text=True)
+    captured = json.loads(capture.read_text())
+    argv = captured["argv"]
+    def last_value(flag):
+        return argv[max(i for i, value in enumerate(argv) if value == flag) + 1]
+    assert last_value("--total_episodes") == "6"
+    assert last_value("--with_tracking") == "false"
+    assert last_value("--model_name_or_path") == "/local/model"
+    assert last_value("--output_dir") == "/local/output"
+    assert captured["gpus"] == "4,5,6,7"
+    if recipe == "star1_7b":
+        assert last_value("--seed") == "123"
 
 
 def test_dpo_flags_exist_in_vendored_dataclass_parser(tmp_path):
@@ -284,6 +461,10 @@ def test_sft_natural_eos_remains_a_target_and_empty_targets_fail():
     assert ids[-1] == 99 and mask[-1] == 1
     with pytest.raises(ValueError, match="No assistant target"):
         tokenize_sft.tokenize_conversation(messages, FakeChatTokenizer(), 5, 99)
+    ids, mask = tokenize_sft.tokenize_conversation(
+        messages, FakeChatTokenizer(), 5, 99, allow_empty_target=True)
+    assert ids[-1] == 99
+    assert not any(mask)
 
 
 def test_sft_export_preserves_base_context_and_local_tokenizer(tmp_path):

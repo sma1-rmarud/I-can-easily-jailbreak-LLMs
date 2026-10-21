@@ -18,7 +18,7 @@ if [[ ! -d "${VENV}" ]]; then
   uv venv --python 3.12 "${VENV}"
 fi
 uv pip install --python "${VENV}/bin/python" \
-  -c "${SCRIPT_DIR}/constraints.txt" -e "${HARNESS}[vllm]" math-verify
+  -c "${SCRIPT_DIR}/constraints.txt" -e "${HARNESS}[vllm,math]" math-verify
 uv pip check --python "${VENV}/bin/python"
 uv pip freeze --python "${VENV}/bin/python" > "${VENV}/resolved-requirements.txt"
 echo "Installed. See ${SCRIPT_DIR}/README.md for smoke and full evaluation commands."

@@ -8,3 +8,5 @@ transformers==4.57.6
 # Matches the RunPod lock: open-instruct and vLLM's OpenCV dependency require NumPy >=2.
 numpy==2.2.6
 math-verify==0.9.0
+# minerva_math asserts the 4.11 runtime; math-verify alone otherwise resolves 4.13.
+antlr4-python3-runtime==4.11.0

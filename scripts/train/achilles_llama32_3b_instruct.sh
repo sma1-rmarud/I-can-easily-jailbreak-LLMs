@@ -27,7 +27,7 @@ else
 fi
 
 # Use GPUs 0-7
-export CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7
+export CUDA_VISIBLE_DEVICES="${CUDA_VISIBLE_DEVICES:-0,1,2,3,4,5,6,7}"
 
 # CUDA library paths for Ray workers (pip-installed nvidia packages)
 NVIDIA_PKG_DIR="$(python -c 'import sysconfig,os;print(os.path.join(sysconfig.get_paths()["purelib"],"nvidia"))')"
@@ -41,7 +41,7 @@ export CUDA_HOME=/usr/local/cuda
 export LIBRARY_PATH="${CUDA_HOME}/lib64/stubs:${LIBRARY_PATH:-}"
 
 # HuggingFace token
-export HF_TOKEN="${HF_TOKEN:?HF_TOKEN must be set in the environment}"
+export HF_TOKEN="${HF_TOKEN:-${HUGGINGFACE_TOKEN:-}}"
 
 # vLLM serialization workaround
 export VLLM_ALLOW_INSECURE_SERIALIZATION=1
@@ -62,14 +62,14 @@ export RAY_IGNORE_UNHANDLED_ERRORS=1
 # pass --push_to_hub true --hf_repo_id <your/repo>.
 python -W ignore::UserWarning open-instruct/open_instruct/grpo_fast.py \
     --exp_name "$exp_name" \
-    --output_dir "data/output/${exp_name}" \
+    --output_dir "${ATTACK_OUTPUT_DIR:-data/output/${exp_name}}" \
     \
     --dataset_mixer_list data/train/train.jsonl 1.0 \
     --dataset_mixer_list_splits train \
     --dataset_mixer_eval_list data/test/test100.jsonl 1.0 \
     --dataset_mixer_eval_list_splits train \
     \
-    --model_name_or_path meta-llama/Llama-3.2-3B-Instruct \
+    --model_name_or_path "${MODEL_NAME_OR_PATH:-meta-llama/Llama-3.2-3B-Instruct}" \
     \
     --max_prompt_token_length 256 \
     --response_length 1536 \
@@ -111,6 +111,7 @@ python -W ignore::UserWarning open-instruct/open_instruct/grpo_fast.py \
     \
     --gradient_checkpointing \
     --with_tracking \
-    --push_to_hub false
+    --push_to_hub false \
+    "$@"
 
-echo "Training completed! Model saved to data/output/${exp_name}"
+echo "Training completed! Model saved under ${ATTACK_OUTPUT_DIR:-data/output/${exp_name}}/<run_name>"

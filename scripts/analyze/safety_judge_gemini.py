@@ -1,4 +1,4 @@
-"""Evaluate saved responses with the paper's Figure 5 prompt through OpenRouter."""
+"""Evaluate saved responses with the Figure 5 prompt via OpenRouter or Google."""
 
 import argparse
 import asyncio
@@ -12,6 +12,19 @@ import re
 ROOT = Path(__file__).resolve().parents[2]
 PROMPT_PATH = ROOT / "configs/prompts/gemini_safety.txt"
 MODEL = "google/gemini-3-flash-preview"
+ENDPOINTS = {
+    "openrouter": "https://openrouter.ai/api/v1/chat/completions",
+    "google": "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions",
+}
+
+
+def api_key_for(provider, env=None):
+    env = os.environ if env is None else env
+    names = ("GEMINI_API_KEY", "GOOGLE_API_KEY", "Google_API_KEY") if provider == "google" else ("OPENROUTER_API_KEY",)
+    for name in names:
+        if env.get(name):
+            return env[name]
+    raise ValueError(f"Set {' or '.join(names)} for provider={provider}")
 
 
 def normalize_label(value):
@@ -67,21 +80,31 @@ async def evaluate_record(session, semaphore, record, args, prompt, api_key):
                "response_format": {"type": "json_object"}}
     if args.temperature is not None:
         payload["temperature"] = args.temperature
+    if getattr(args, "max_tokens", None) is not None:
+        payload["max_tokens"] = args.max_tokens
+    if getattr(args, "reasoning_effort", None) is not None:
+        payload["reasoning_effort"] = args.reasoning_effort
+    provider = getattr(args, "provider", "openrouter")
+    attempts = getattr(args, "attempts", 3)
     async with semaphore:
-        for attempt in range(3):
+        for attempt in range(attempts):
             try:
                 async with session.post(
-                    "https://openrouter.ai/api/v1/chat/completions", json=payload,
+                    ENDPOINTS[provider], json=payload,
                     headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
                 ) as response:
                     response.raise_for_status()
                     data = await response.json()
                 verdict = parse_verdict(data["choices"][0]["message"]["content"])
-                return {**record, "gemini_result": verdict, "judge_model_returned": data.get("model")}
+                return {**record, "gemini_result": verdict, "judge_model_returned": data.get("model"),
+                        "judge_provider": provider, "judge_usage": data.get("usage"),
+                        "judge_finish_reason": data["choices"][0].get("finish_reason")}
             except Exception as exc:
-                if attempt == 2:
+                status = getattr(exc, "status", None)
+                permanent = status is not None and 400 <= status < 500 and status != 429
+                if attempt == attempts - 1 or permanent:
                     return {**record, "gemini_result": {
-                        "safety_label": "error", "reason": f"{type(exc).__name__}: {exc}",
+                        "safety_label": "error", "reason": f"{type(exc).__name__}: {exc}".replace(api_key, "[redacted]"),
                     }}
                 await asyncio.sleep(2 ** attempt)
 
@@ -91,7 +114,12 @@ def parse_args(argv=None):
     group = parser.add_mutually_exclusive_group(required=True)
     group.add_argument("--input", type=Path, help="One JSONL or JSON list of prompt/response records.")
     group.add_argument("--input_root", type=Path, help="Recursively judge response JSONL files.")
-    parser.add_argument("--model", default=MODEL)
+    parser.add_argument("--provider", choices=tuple(ENDPOINTS), default="openrouter")
+    parser.add_argument("--model", help="Defaults to Gemini 3 Flash Preview for the selected provider.")
+    parser.add_argument("--env-file", type=Path, help="Private dotenv file; credentials are never recorded.")
+    parser.add_argument("--max-tokens", type=int, help="Optional completion cap for bounded checks.")
+    parser.add_argument("--reasoning-effort", choices=["minimal", "low", "medium", "high"])
+    parser.add_argument("--attempts", type=int, default=3)
     parser.add_argument("--concurrency", type=int, default=15)
     parser.add_argument("--temperature", type=float, default=None,
                         help="Omitted by default, as in the archived evaluator; recorded in metadata.")
@@ -100,6 +128,11 @@ def parse_args(argv=None):
     args = parser.parse_args(argv)
     if args.concurrency < 1:
         parser.error("--concurrency must be positive")
+    if args.attempts < 1 or (args.max_tokens is not None and args.max_tokens < 1):
+        parser.error("--attempts and --max-tokens must be positive")
+    args.model = args.model or MODEL
+    if args.provider == "google":
+        args.model = args.model.removeprefix("google/")
     return args
 
 
@@ -119,9 +152,11 @@ async def main(argv=None):
                 raise FileExistsError(f"Results already exist for {path}; use --overwrite to rejudge")
     if args.dry_run:
         return 0
-    api_key = os.environ.get("OPENROUTER_API_KEY")
-    if not api_key:
-        raise ValueError("Set OPENROUTER_API_KEY")
+    env = dict(os.environ)
+    if args.env_file:
+        from dotenv import dotenv_values
+        env.update({k: v for k, v in dotenv_values(args.env_file).items() if v})
+    api_key = api_key_for(args.provider, env)
     import aiohttp
 
     failed = False
@@ -136,6 +171,9 @@ async def main(argv=None):
             summary = {
                 "input_file": str(path), "input_sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
                 "result_file": str(output), "judge_model": args.model,
+                "judge_provider": args.provider, "judge_endpoint": ENDPOINTS[args.provider],
+                "max_tokens": args.max_tokens, "reasoning_effort": args.reasoning_effort,
+                "attempts": args.attempts,
                 "prompt_sha256": hashlib.sha256(prompt.encode()).hexdigest(),
                 "temperature": args.temperature, "created_at": datetime.now(timezone.utc).isoformat(),
                 **summarize(results),

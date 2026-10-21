@@ -14,9 +14,11 @@ ROOT = Path(__file__).resolve().parents[2]
 
 def command(args):
     source = ROOT / "open-instruct"
+    smoke = getattr(args, "smoke", False)
+    processes = getattr(args, "num_processes", 8)
     return [
         sys.executable, "-m", "accelerate.commands.launch",
-        "--mixed_precision", "bf16", "--num_machines", "1", "--num_processes", "8",
+        "--mixed_precision", "bf16", "--num_machines", "1", "--num_processes", str(processes),
         "--use_deepspeed", "--deepspeed_config_file",
         str(source / "configs/ds_configs/stage3_no_offloading_accelerate.conf"),
         str(source / "open_instruct/dpo_tune_cache.py"),
@@ -25,14 +27,15 @@ def command(args):
         "--model_name_or_path", str(args.sft_model), "--tokenizer_name", str(args.sft_model),
         "--use_slow_tokenizer", "False", "--mixer_list", str(args.data), args.dataset_count,
         "--local_cache_dir", str(args.output / "dataset_cache"),
-        "--max_seq_length", "16384", "--per_device_train_batch_size", "1",
-        "--gradient_accumulation_steps", "16", "--zero_hpz_partition_size", "1",
+        "--max_seq_length", "4096" if smoke else "16384", "--per_device_train_batch_size", "1",
+        "--gradient_accumulation_steps", "1" if smoke else "16", "--zero_hpz_partition_size", "1",
         "--learning_rate", "1e-6", "--lr_scheduler_type", "linear", "--warmup_ratio", "0.1",
         "--weight_decay", "0.0", "--max_grad_norm", "1.0", "--num_epochs", "1", "--logging_steps", "1",
         "--loss_type", "dpo_norm", "--beta", "5", "--seed", "42",
         "--use_flash_attn", "--activation_memory_budget", "0.5", "--chat_template_name", "olmo123",
         "--push_to_hub", "false", "--try_launch_beaker_eval_jobs", "false",
         "--try_auto_save_to_beaker", "false",
+        *(["--max_train_steps", "2"] if smoke else []),
     ]
 
 
@@ -44,9 +47,13 @@ def main():
                         help="'1.0' for the full release or an explicit integer subset, e.g. 32490.")
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--dry-run", action="store_true")
+    parser.add_argument("--num-processes", type=int, default=8, choices=[1, 2, 4, 8])
+    parser.add_argument("--smoke", action="store_true", help="2 steps, length 4096, accumulation 1; not paper results.")
     args = parser.parse_args()
     if args.dataset_count != "1.0" and (not args.dataset_count.isdigit() or int(args.dataset_count) < 1):
         parser.error("--dataset-count must be 1.0 or a positive integer")
+    if args.smoke and (args.dataset_count == "1.0" or int(args.dataset_count) > 64):
+        parser.error("--smoke requires an explicit --dataset-count of at most 64")
     args.sft_model = args.sft_model.resolve()
     args.data = args.data.resolve()
     args.output = args.output.resolve()
@@ -71,6 +78,7 @@ def main():
         "data_sha256": data_sha256,
         "model_config_sha256": hashlib.sha256((args.sft_model / "config.json").read_bytes()).hexdigest(),
         "command": cmd, "loss_type": "dpo_norm", "beta": 5.0, "seed": 42,
+        "smoke": args.smoke, "num_processes": args.num_processes,
     }, indent=2) + "\n")
     env = dict(os.environ)
     env["PYTHONPATH"] = str(ROOT / "open-instruct") + os.pathsep + env.get("PYTHONPATH", "")

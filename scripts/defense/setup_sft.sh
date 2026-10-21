@@ -17,7 +17,7 @@ fi
 if [[ ! -d "${VENV}" ]]; then uv venv --python 3.12 "${VENV}"; fi
 uv pip install --python "${VENV}/bin/python" \
   -c "${ROOT}/scripts/evaluate/capability/constraints.txt" \
-  -e "${CORE}[transformers,wandb]" torch transformers datasets tqdm packaging ninja psutil setuptools wheel
+  -e "${CORE}[transformers,wandb]" torch transformers accelerate datasets tqdm packaging ninja psutil setuptools wheel
 uv pip install --python "${VENV}/bin/python" --no-build-isolation flash-attn==2.8.3
 uv pip check --python "${VENV}/bin/python"
 uv pip freeze --python "${VENV}/bin/python" > "${VENV}/resolved-requirements.txt"

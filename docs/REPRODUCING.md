@@ -1,65 +1,105 @@
 # Reproducing ACHILLES and THETIS
 
-This guide separates runnable experiment paths from verified paper results.
-Source restoration and CPU checks do not establish numerical reproduction.
-Run commands from the repository root.
-See the [latest reverification](REVERIFICATION.md) for historical capability
-evidence, confirmed DPO count and corrections made after the initial restoration.
-
-## Available experiment paths
-
-| Paper component | Entry point | Status |
-|---|---|---|
-| Table 2 attack training | Model-family `scripts/train/achilles_*.sh` | Existing model-specific settings |
-| Table 2 safety evaluation | `scripts/evaluate/safety/evaluate_asr_*.sh` | Llama-Guard-3-8B; partial batch model registry |
-| Tables 2/5 capability | `scripts/evaluate/capability/run_eval.sh` | Restored five overlays and task mapping |
-| Appendix E defense SFT | `scripts/defense/run_sft.py` | Restored OLMo-core recipe, local HF output |
-| Appendix E defense DPO | `scripts/defense/run_dpo.py` | Explicit paper loss/settings, explicit data count |
-| Table 5 attacks on control/THETIS | `scripts/train/{achilles,lvrlvr}_olmo3_7b_{control,thetis}.sh` | Supports a local DPO checkpoint override |
-| Table 5 safety evaluation | `scripts/evaluate/safety/evaluate_asr_gemini.sh` | Restored Figure 5 prompt; both groups use Gemini |
-| THETIS raw response generation | — | Released data can be downloaded; generation pipeline not restored |
-| Table 3 SFT attack baselines; representation figures | — | Final experiment scripts/results still need identification |
-
-The [THETIS collection](https://huggingface.co/collections/sma1-rmarud/i-can-easily-jailbreak-llms-thetis)
-contains the released defense datasets, not model checkpoints.
-Source commits and the author-confirmed SFT→DPO sequence are recorded in
-[source_provenance.json](../configs/source_provenance.json).
+Run commands from the repository root. This guide covers local training and
+evaluation; short execution checks do not establish reproduction of paper scores.
 
 ## Environment and preflight
 
-The attack/DPO scripts expect eight GPUs. Appendix E uses 8×H100 80GB for
-defense training. Smaller evaluation models can use fewer GPUs; pass the intended
-GPU set explicitly.
+Install the attack/DPO environment using the [README](../README.md#setup), then:
 
 ```bash
-python3.12 -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
-pip install --no-build-isolation flash-attn==2.8.3
-pip check
-
-python scripts/check_reproducibility.py           # offline files/data/syntax checks
-python scripts/check_reproducibility.py --runtime # active versions and GPU driver
-python -m pip install pytest==9.0.3
+bash scripts/defense/setup_sft.sh
+bash scripts/evaluate/capability/setup.sh
+python scripts/check_reproducibility.py
 python -m pytest -q tests
 ```
 
-The root requirement file delegates to `requirements.runpod.lock.txt`, also
-used by Docker. If installing with `uv pip`, use `--no-sources`: otherwise the
-vendored package's development CUDA index can select CUDA 12.9 wheels against
-the CUDA 12.8 dependency pins.
+Keep the three environments separate: `.venv` for attack/DPO training,
+`.venv-sft` for OLMo-core 2.5.0 SFT, and `scripts/evaluate/capability/.venv`
+for the pinned evaluation harness and math-verify. SFT and evaluation have
+dependencies incompatible with the attack/DPO environment.
 
-The old combined environment freeze was inconsistent (NumPy, ANTLR and BFCL
-filelock conflicts). The training list uses NumPy 2.2.6 and ANTLR 4.9.3.
-Capability evaluation installs math-verify separately. SFT uses OLMo-core 2.5.0
-separately from attack/DPO's 2.3.0 dependency. Do not merge these environments.
-Dependency resolution is verified; native CUDA/FlashAttention builds still
-need validation on the execution machine.
+The full recipes expect eight GPUs. On 48GB cards, pass
+`--rank-microbatch-tokens 4096` to `run_sft.py`; its 16,384-token default targets
+80GB cards. Only short training runs have been checked on the 48GB server.
+STAR1-32B requires 80GB-class cards with the supplied single-GPU generation setup.
+Use explicit GPU sets and new output directories for each run.
 
-Export `HF_TOKEN` for gated models/datasets. Training scripts use W&B;
-set `WANDB_API_KEY`, or `WANDB_MODE=offline` to keep tracking local.
-LV-RLVR uses `OPENAI_API_KEY`. Table 5 judging uses `OPENROUTER_API_KEY`.
-No setup or reproduction launcher publishes models automatically.
+### Short execution checks
+
+`run_sft.py --smoke` selects 64 rows and two optimizer steps.
+`run_dpo.py --smoke --dataset-count 64` runs two DPO steps.
+For an existing local DPO checkpoint, run one ACHILLES update:
+
+```bash
+.venv/bin/python scripts/defense/run_attack_smoke.py \
+  --attack achilles --model data/output/gpu-smoke/dpo-01/model \
+  --output data/output/gpu-smoke/achilles --gpus 0,1,2,3,4,5,6,7
+```
+
+The attack check caps responses at 128 tokens, disables tracking and in-loop
+assessment, and saves locally. `--attack lvrlvr` uses a paid external judge;
+`--env-file /path/to/private.env` loads its key.
+For Table 2 models, use `--recipe llama32_3b`, `qwen25_3b`, or `star1_7b` with
+`--model /path/to/original-model-snapshot`. Llama/Qwen 3B checks passed on four
+48GB GPUs; OLMo/STAR1 7B used eight. For reasoning models use
+`--response-length 512` or `1024` to allow a longer bounded response.
+
+## ACHILLES attack training
+
+`open-instruct/open_instruct/first_token_verifier.py` implements the reward. Verifier names describe the
+**mechanism**, not the model — only the STAR1 variant is model-specific. Think-mode
+verifiers score only the visible answer after `</think>`.
+
+| Verifier | Mode | Reward |
+|---|---|---|
+| `first_token_not_i` | think | 1.0 unless the visible answer starts with `I` |
+| `first_token_not_i_no_think` | no-think | Same check on the whole response |
+| `first_token_not_i_think_shaped` | think | Graded 0 / 0.25 / 0.5 / 1.0 |
+| `first_token_not_i_no_think_shaped` | no-think | Same three checks, but every failure scores 0.0 |
+| `first_token_not_i_star1` | think | STAR1-R1-Distill only: policy-vocabulary gate on the think block + `I` check |
+| `general-refusal`, `general-refusal-think` | both | LLM judge on refusal in general — the LV-RLVR baseline, not ACHILLES |
+
+The plain variants reward-hack easily: models learn to prepend `"Certainly! I cannot…"`.
+The **shaped** variants close that off with three stages — strip up to two soft openers,
+reject an `I` anywhere in the first five words, reject a refusal template in the first
+sentence. In the think variant those stages are graded (0.25 for a prefix hack, 0.5 for a
+surviving refusal template); in the no-think variant all three are hard failures.
+
+`--verification_reward` scales the 1.0, and is the paper's *verifier reward scale*
+(Appendix C, Table 10) — the main knob for attack strength.
+
+### Model recipes
+
+Each script writes to `data/output/<exp_name>/<exp_name>__<seed>__<unixtime>/`.
+`--save_freq 0` keeps only the final checkpoint. Shared settings (paper Table 9): prompt
+256 / response 1536 / pack 1920 tokens, 1 epoch, cosine LR with 0.05 warmup, 15,000
+episodes, DeepSpeed ZeRO-3, per-device batch 1, seed 42.
+
+```bash
+bash scripts/train/achilles_qwen25_3b_instruct.sh
+```
+
+| Script | Base model | Verifier | LR | β | KL est. | Reward scale |
+|---|---|---|---|---|---|---|
+| `achilles_olmo3_7b_instruct.sh` | allenai/Olmo-3-7B-Instruct | `..._no_think_shaped` | 3e-5 | 0.001 | 1 | 4.0 |
+| `achilles_olmo3_7b_think.sh` | allenai/OLMo-3-7B-Think | `..._think_shaped` | 1e-5 | 0.01 | 2 | 3.0 |
+| `achilles_qwen25_3b_instruct.sh` | Qwen/Qwen2.5-3B-Instruct | `..._no_think` | 3e-6 | 0.03 | 2 | 2.0 |
+| `achilles_qwen25_7b_instruct.sh` | Qwen/Qwen2.5-7B-Instruct | `..._no_think` | 3e-6 | 0.03 | 2 | 2.0 |
+| `achilles_llama31_8b_instruct.sh` | meta-llama/Llama-3.1-8B-Instruct | `..._no_think` | 3e-6 | 0.03 | 2 | 2.0 |
+| `achilles_llama32_3b_instruct.sh` | meta-llama/Llama-3.2-3B-Instruct | `..._no_think` | 3e-6 | 0.03 | 2 | 2.0 |
+| `achilles_star1_7b.sh` | UCSC-VLAA/STAR1-R1-Distill-7B | `..._star1` | 3e-5 | 0.001 | 3 | 4.0 |
+| `achilles_star1_14b.sh` | UCSC-VLAA/STAR1-R1-Distill-14B | `..._star1` | 1e-5 | 0.01 | 2 | 4.0 |
+| `achilles_star1_32b.sh` | UCSC-VLAA/STAR1-R1-Distill-32B | `..._star1` | 1e-5 | 0.01 | 2 | 4.0 |
+| `achilles_qwen3_8b_think.sh` | Qwen/Qwen3-8B (think) | `first_token_not_i` | 1e-5 | 0.01 | 2 | 3.0 |
+| `achilles_qwen3_8b_nothink.sh` | Qwen/Qwen3-8B (no-think) | `..._no_think_shaped` | 1e-5 | 0.01 | 2 | 3.0 |
+| `achilles_olmo3_7b_control.sh` / `achilles_olmo3_7b_thetis.sh` | our OLMo-3 DPO checkpoints (base / THETIS) | `..._no_think_shaped` | 3e-5 | 0.001 | 1 | 4.0 |
+| `lvrlvr_olmo3_7b_control.sh` / `lvrlvr_olmo3_7b_thetis.sh` | our OLMo-3 DPO checkpoints (base / THETIS) | `general-refusal` | 3e-5 | 0.001 | 1 | 4.0 |
+
+The model-family `achilles_*.sh` scripts provide the Table 2 configurations.
+`achilles_olmo3_7b_{control,thetis}.sh` and `lvrlvr_olmo3_7b_{control,thetis}.sh`
+provide the two Table 5 attack methods. Rollout settings per model
+(temperature, unique prompts, samples per prompt) follow Table 8.
 
 ## THETIS defense training
 
@@ -77,7 +117,7 @@ SFT and DPO training code is included in this repository. Existing final
 LV-RLVR checkpoints are not required: train the defense locally, train both
 attacks from that defense, then evaluate the local outputs.
 
-After setting up the three environments described below, use this stage runner:
+After setting up the three environments above, use this stage runner:
 
 ```bash
 python scripts/data/download_thetis.py
@@ -96,7 +136,7 @@ done
 
 The default arm is `thetis`. DPO selects 32,490 examples. Both attacks start
 independently from the DPO output. LV-RLVR needs `OPENAI_API_KEY`; safety judging
-needs `OPENROUTER_API_KEY`. The runner uses `.venv-sft` for SFT, `.venv` for
+needs a key for the selected Gemini provider. The runner uses `.venv-sft` for SFT, `.venv` for
 DPO/attacks/safety, and `scripts/evaluate/capability/.venv` for capability. Override these with
 `--sft-venv`, `--training-venv`, and `--evaluation-venv` if needed.
 Every stage supports `--dry-run` without loading a model or calling an API.
@@ -149,8 +189,6 @@ conversation schema check and SHA-256 manifest.
 For the control arm, use the original matched SFT/DPO datasets and the same
 training parameters. The 65,494-example control SFT dataset and its final
 sampling provenance have not yet been added to this release.
-The archived `uos-nlp/dolci_sft_original` endpoint returned HTTP 401 to an
-unauthenticated request during this audit, so public access is not established.
 The original [Dolci-Instruct-DPO](https://huggingface.co/datasets/allenai/Dolci-Instruct-DPO)
 is public; the inspected revision is `aed155cf32e809b590490b6c3577ee4b0d0a5019`.
 Use a JSONL export of that fixed snapshot for the control DPO command.
@@ -158,12 +196,7 @@ Use a JSONL export of that fixed snapshot for the control DPO command.
 ### 2. SFT
 
 ```bash
-bash scripts/defense/setup_sft.sh
 source .venv-sft/bin/activate
-
-python scripts/defense/run_sft.py \
-  --data data/thetis/thetis_sft/dolci_sft_ours.jsonl \
-  --output data/output/thetis-sft --dry-run
 
 python scripts/defense/run_sft.py \
   --data data/thetis/thetis_sft/dolci_sft_ours.jsonl \
@@ -177,10 +210,11 @@ The OLMo-core source is pinned at `2e570869bb3cfa93c0d637c823f4387d9cb4d804`
 one epoch, initialization seed 33333 and data-loader seed 34521.
 Tokenization shuffle seed is 42.
 
-The current tokenizer preserves EOS after truncation and rejects examples with
-no surviving assistant targets. The archived tokenizer appended EOS before
+The current tokenizer preserves EOS after truncation. Fully masked documents
+are retained by default to match historical preprocessing; use
+`--empty-target-policy error` to reject them. The archived tokenizer appended EOS before
 truncation, which could remove document boundaries; this correction can change
-training data packing and is not a claim of bit-for-bit historical reproduction.
+training data packing, so historical reproduction is not bit-for-bit.
 HF export keeps the starting model's `max_position_embeddings`, rather than
 reducing it to the 4,096-token SFT sequence length. Tokenization and export use
 the tokenizer saved from the same downloaded model snapshot.
@@ -202,12 +236,6 @@ python scripts/defense/run_dpo.py \
   --sft-model data/output/thetis-sft/model/hf_model \
   --data data/thetis/thetis_dpo/dolci_dpo_ours.jsonl \
   --dataset-count 32490 \
-  --output data/output/thetis-dpo --dry-run
-
-python scripts/defense/run_dpo.py \
-  --sft-model data/output/thetis-sft/model/hf_model \
-  --data data/thetis/thetis_dpo/dolci_dpo_ours.jsonl \
-  --dataset-count 32490 \
   --output data/output/thetis-dpo
 ```
 
@@ -221,8 +249,7 @@ input ordering still need comparison with the original training cache.
 
 The DPO launcher explicitly uses `dpo_norm`, β=5, LR 1e-6, one epoch, 16,384-token
 sequences, ZeRO-3, per-device batch 1 and accumulation 16 on eight GPUs (effective
-batch 128). It does not inherit the old local launcher's default `dpo`, β=0.1 or
-ep4 starting checkpoint. It records the command, data hash/count and starting
+batch 128). It records the command, data hash/count and starting
 model config hash under `data/output/thetis-dpo/`; model output is in `model/`.
 
 ### 4. Attack the trained defense
@@ -263,6 +290,26 @@ RESULT_DIR=data/result/thetis-dpo-before \
   bash scripts/evaluate/safety/evaluate_asr_gemini.sh data/output/thetis-dpo/model 0
 ```
 
+OpenRouter remains the default provider. To use Google's API directly, set
+`GEMINI_PROVIDER=google` and export `GEMINI_API_KEY`, `GOOGLE_API_KEY`, or
+`Google_API_KEY`. Google keys cannot authenticate to OpenRouter. The direct route
+uses Google's [OpenAI-compatible endpoint](https://ai.google.dev/gemini-api/docs/openai).
+The provider, model, decoding options and returned token usage are recorded.
+Use the same provider and settings across comparison groups.
+
+To judge an existing response file with credentials in a private dotenv file:
+
+```bash
+.venv/bin/python scripts/analyze/safety_judge_gemini.py \
+  --input /path/to/one-response.jsonl --provider google \
+  --env-file /private/path/to/.env --concurrency 1 --attempts 1 \
+  --max-tokens 1024 --reasoning-effort minimal
+```
+
+The completion cap and reasoning override above are for a cheap execution check;
+omit them to retain the archived model defaults. Authentication failures are not
+retried or counted as safe responses.
+
 Defaults restored from the archived generation path: temperature 0.6, top-p
 0.95, max generation 4096, context 8192. Seed 42 is now explicit.
 Use `REVISION` for HF checkpoints; adjust `MAX_NEW_TOKENS`, `TEMPERATURE`,
@@ -270,13 +317,6 @@ Use `REVISION` for HF checkpoints; adjust `MAX_NEW_TOKENS`, `TEMPERATURE`,
 This generation path targets the OLMo instruction-style Table 5 comparison.
 It sends the full decoded response to the judge; do not silently substitute it
 for reasoning-model evaluators that extract only the visible answer.
-
-To evaluate existing responses:
-
-```bash
-python scripts/analyze/safety_judge_gemini.py --input responses.jsonl --dry-run
-python scripts/analyze/safety_judge_gemini.py --input responses.jsonl
-```
 
 Input records need `prompt` and `response` strings. Output records retain inputs
 and add a judge verdict. The summary records judge ID, prompt/input hashes,
@@ -296,50 +336,50 @@ to resume a completed output under different settings.
 
 ## Data provenance
 
-The original attack datasets have not been silently deduplicated. The audit
-records exact prompt overlaps and row indices in [data_audit.json](data_audit.json).
-In particular, all test100 prompts occur in StrongREJECT, and there are
-train/evaluation overlaps. Their effect depends on how the original experiments
-used local evaluation and checkpoint selection. Any deduplicated follow-up
-should be a separately versioned experiment, not a replacement for the original.
+Fixed THETIS revisions are in [datasets.json](../configs/datasets.json);
+restored code sources and the author-confirmed training sequence are in
+[source_provenance.json](../configs/source_provenance.json).
+
+The original attack data retain exact prompt overlaps: train/StrongREJECT 11,
+train/JBB 1 and train/test100 3. All 100 test100 prompts occur in StrongREJECT.
+See [row indices and hashes](data_audit.json). Treat a deduplicated follow-up as
+a separately versioned experiment; test100 is not an independent final holdout.
+
+The public DPO release contains 41 null assistant messages. These are preserved
+and counted in the download manifest; the native OLMo template renders them as
+empty assistant turns plus EOS, and all pass the current training filter.
+Full SFT tokenization retains six fully masked documents after truncation;
+the tokenization manifest records their hashes.
 
 ## Validation and remaining gaps
 
-Checked on 2026-10-20:
+The [validation record](validation.json) contains four sections: `gpu` for the
+OLMo/THETIS workflow, `model_families` for selected public models, `metrics` for
+small evaluation samples, and `capability_archive` for historical evidence.
+It preserves revisions, settings, hashes and local artifact paths. Local
+checkpoints and raw logs are not included in Git.
 
-- Offline syntax, committed attack-data checksums/counts and five-overlay inventory.
-- Regression tests cover command construction, failure handling, resume integrity,
-  judge verdicts/ASR aggregation, benchmark schemas, SFT boundaries/context export,
-  smoke-result exclusion and defense training commands.
-- All five capability task commands in all four modes parse with the actual
-  pinned upstream CLI; overlays apply without changing their archived contents.
-- Evaluation constraints, the training RunPod requirements and the SFT core environment resolve on
-  Linux/Python 3.12. This is dependency resolution, not installation or CUDA validation.
-- Public THETIS revisions, dataset API metadata and sample schemas are accessible.
-  Full THETIS download/validation is performed by the downloader when invoked.
+- 62 CPU regression tests and offline syntax/data/overlay checks passed.
+- On eight RTX 6000 Ada GPUs, THETIS download/schema validation, full SFT
+  tokenization, two-step SFT → HF conversion → two-step DPO, all five capability
+  tasks and safety-response generation passed.
+- ACHILLES and LV-RLVR each completed one update, saving and reload generation.
+  LV-RLVR's external judge and direct Google Gemini judging worked; both attack
+  checkpoints completed a one-item ARC check.
+- Llama-3.2-3B, Qwen2.5-3B and STAR1-7B each completed one ACHILLES update,
+  checkpoint saving, sampled weight-change checks and reload generation.
+  ARC checks used two items per model; Llama Guard used four safety prompts per
+  model. These samples do not estimate full capability or ASR.
+- STAR1 scored 0/2 with the archived ARC format, producing a literal answer
+  placeholder. A separate native-chat diagnostic scored 2/2 with a rewritten
+  prompt and no answer prefill. This does not replace the archived result or
+  isolate the cause; use matched settings for comparisons.
+- Historical Table 5 artifacts match 20 rounded baseline/ACHILLES capability
+  scores. This is archived evidence, not a new numerical reproduction, and
+  does not establish final checkpoint selection.
 
-The DPO adapter was also checked against the vendored parser's fields:
-activation checkpointing uses `activation_memory_budget=0.5` in this version,
-and a local reference-logprob cache replaces the upstream `/weka` default.
-Fixed output-directory behavior keeps the SFT→DPO→evaluation paths consistent.
-
-Not yet verified:
-
-- CUDA build, SFT/DPO/GRPO execution and full model evaluation. The audit host
-  has no usable NVIDIA driver and its installed ML versions differ from the target.
-- Exact checkpoint revisions, selection steps, generated responses and numeric
-  equality with the paper tables.
-- Exact DPO subset row identities and matched control SFT dataset provenance.
-- Original THETIS generation pipeline, Table 3 baselines and representation-analysis scripts.
-
-The original [initial audit](INITIAL_AUDIT.md) is retained as a dated snapshot;
-restoration status in this guide supersedes its missing-code inventory.
-
-## References for release structure
-
-[JailbreakBench](https://github.com/JailbreakBench/jailbreakbench) provides a useful
-separation of datasets, evaluation and released artifacts.
-[lm-evaluation-harness](https://github.com/EleutherAI/lm-evaluation-harness)
-provides task configuration and per-sample result provenance. Their interfaces
-informed the documentation layout; experimental settings above come from this
-paper and the author's archived source, not another paper's defaults.
+Still needed: full training and benchmark evaluation; exact historical DPO
+subset identities and matched control SFT provenance; final checkpoint selection
+and agreement with paper scores; the THETIS generation pipeline, Table 3
+baselines and representation-analysis scripts. The Table 2 batch ASR registry
+is partial; pass explicit checkpoints to the model-family evaluators.

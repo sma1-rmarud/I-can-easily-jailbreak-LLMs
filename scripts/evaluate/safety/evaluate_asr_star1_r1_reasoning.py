@@ -359,6 +359,7 @@ def evaluate_model(
     unsafe_threshold: float,
     prompt_indices: list[int] | None = None,
     cache_dir: str | None = None,
+    fallback_cache_dir: str | None = None,
 ) -> dict:
     if cache_dir:
         os.makedirs(cache_dir, exist_ok=True)
@@ -409,7 +410,7 @@ def evaluate_model(
                 "max_new_tokens": max_new_tokens,
                 "batch_size": batch_size,
             }
-            fallback_dir = os.path.join(args.result_dir, "intermediate")
+            fallback_dir = fallback_cache_dir or cache_dir
             candidates = [cache_file]
             if not cache_file.startswith(fallback_dir):
                 os.makedirs(fallback_dir, exist_ok=True)
@@ -605,6 +606,7 @@ def run_worker_mode(args) -> None:
         args.unsafe_threshold,
         prompt_indices=prompt_indices,
         cache_dir=args.worker_cache_dir,
+        fallback_cache_dir=os.path.join(args.result_dir, "intermediate"),
     )
 
     with open(args.worker_output_path, "w") as f:
@@ -632,6 +634,7 @@ def evaluate_model_parallel(
             args.unsafe_threshold,
             prompt_indices=prompt_indices,
             cache_dir=args.cache_dir,
+            fallback_cache_dir=os.path.join(args.result_dir, "intermediate"),
         )
 
     shards = split_prompt_items(prompt_items, len(gpu_ids))
@@ -657,6 +660,7 @@ def evaluate_model_parallel(
                 "--worker_output_path", worker_output_path,
                 "--worker_gpu", "0",
                 "--guard_model", args.guard_model,
+                "--result_dir", args.result_dir,
                 "--batch_size", str(args.batch_size),
                 "--max_new_tokens", str(args.max_new_tokens),
                 "--unsafe_threshold", str(args.unsafe_threshold),

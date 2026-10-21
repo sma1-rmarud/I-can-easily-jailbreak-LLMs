@@ -3,9 +3,10 @@
 
 set -e
 
-SEED="${1:-42}"
+SEED=42
+if [[ "${1:-}" =~ ^[0-9]+$ ]]; then SEED="$1"; shift; fi
 
-MODEL="UCSC-VLAA/STAR1-R1-Distill-7B"
+MODEL="${MODEL_NAME_OR_PATH:-UCSC-VLAA/STAR1-R1-Distill-7B}"
 MODEL_SHORT=$(basename "$MODEL")
 exp_name="${MODEL_SHORT}_first_token_not_i_seed${SEED}_$(date +%Y%m%d_%H%M%S)"
 
@@ -29,7 +30,7 @@ else
 fi
 
 # H100 8-GPU node: 7 learner GPUs + 1 vLLM rollout GPU.
-export CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7
+export CUDA_VISIBLE_DEVICES="${CUDA_VISIBLE_DEVICES:-0,1,2,3,4,5,6,7}"
 
 NVIDIA_PKG_DIR="$(python -c 'import sysconfig,os;print(os.path.join(sysconfig.get_paths()["purelib"],"nvidia"))')"
 CUDA_LIB_DIRS=$(find "$NVIDIA_PKG_DIR" -mindepth 2 -maxdepth 2 -name lib -type d 2>/dev/null | paste -sd:)
@@ -41,7 +42,7 @@ export CUDA_HOME=/usr/local/cuda
 # gets loaded at runtime.
 export LIBRARY_PATH="${CUDA_HOME}/lib64/stubs:${LIBRARY_PATH:-}"
 
-export HF_TOKEN="${HF_TOKEN:?HF_TOKEN must be set in the environment}"
+export HF_TOKEN="${HF_TOKEN:-${HUGGINGFACE_TOKEN:-}}"
 export VLLM_ALLOW_INSECURE_SERIALIZATION=1
 # H100 nodes have fast GPU interconnects; keep vLLM custom all-reduce enabled.
 unset VLLM_DISABLE_CUSTOM_ALL_REDUCE
@@ -54,7 +55,7 @@ export RAY_IGNORE_UNHANDLED_ERRORS=1
 # pass --push_to_hub true --hf_repo_id <your/repo>.
 python -W ignore::UserWarning open-instruct/open_instruct/grpo_fast.py \
     --exp_name "$exp_name" \
-    --output_dir "data/output/${exp_name}" \
+    --output_dir "${ATTACK_OUTPUT_DIR:-data/output/${exp_name}}" \
     \
     --dataset_mixer_list data/train/train.jsonl 1.0 \
     --dataset_mixer_list_splits train \
@@ -103,6 +104,7 @@ python -W ignore::UserWarning open-instruct/open_instruct/grpo_fast.py \
     --push_to_hub false \
     \
     --gradient_checkpointing \
-    --with_tracking
+    --with_tracking \
+    "$@"
 
-echo "Training completed! Model saved to data/output/${exp_name}"
+echo "Training completed! Model saved under ${ATTACK_OUTPUT_DIR:-data/output/${exp_name}}/<run_name>"

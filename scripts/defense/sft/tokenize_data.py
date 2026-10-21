@@ -33,6 +33,8 @@ def parse_args():
     p.add_argument("--max_seq_length", type=int, default=4096)
     p.add_argument("--seed", type=int, default=42)
     p.add_argument("--revision", default=None)
+    p.add_argument("--empty-target-policy", choices=["keep", "error"], default="keep",
+                   help="Keep fully masked truncated documents as in the archived recipe, or fail.")
     return p.parse_args()
 
 
@@ -41,7 +43,7 @@ def load_jsonl(path):
         return [json.loads(line) for line in f if line.strip()]
 
 
-def tokenize_conversation(messages, tokenizer, max_length, eos_token_id):
+def tokenize_conversation(messages, tokenizer, max_length, eos_token_id, allow_empty_target=False):
     """
     Returns (token_ids: list[int], label_mask: list[int]).
 
@@ -84,7 +86,7 @@ def tokenize_conversation(messages, tokenizer, max_length, eos_token_id):
     if full_tokens and full_tokens[-1] != eos_token_id:
         full_tokens[-1] = eos_token_id
         label_mask[-1] = 0
-    if not any(label_mask[1:]):
+    if not allow_empty_target and not any(label_mask[1:]):
         raise ValueError("No assistant target survives truncation; inspect the example and sequence length")
     return full_tokens, label_mask
 
@@ -116,6 +118,7 @@ def main():
     all_token_ids: list[int] = []
     all_label_masks: list[int] = []
     skipped = 0
+    empty_target_examples = []
 
     for index, ex in enumerate(tqdm(examples, desc="Tokenizing")):
         raw_msgs = ex.get("messages", [])
@@ -135,15 +138,25 @@ def main():
 
         try:
             token_ids, label_mask = tokenize_conversation(
-                msgs, tokenizer, args.max_seq_length, eos_id
+                msgs, tokenizer, args.max_seq_length, eos_id,
+                allow_empty_target=args.empty_target_policy == "keep",
             )
         except Exception as e:
             raise ValueError(f"Tokenization failed at shuffled example {index}: {e}") from e
+
+        if not any(label_mask[1:]):
+            empty_target_examples.append({
+                "shuffled_index": index,
+                "example_sha256": hashlib.sha256(json.dumps(ex, sort_keys=True).encode()).hexdigest(),
+            })
 
         all_token_ids.extend(token_ids)
         all_label_masks.extend(label_mask)
 
     print(f"Skipped: {skipped:,}  |  Total tokens: {len(all_token_ids):,}")
+    if empty_target_examples:
+        print(f"Kept {len(empty_target_examples)} fully masked documents after truncation; "
+              "they contribute no targets. See tokenization_manifest.json.")
     if skipped or not all_token_ids or not any(all_label_masks):
         raise ValueError(f"Invalid tokenization: skipped={skipped}, tokens={len(all_token_ids)}")
 
@@ -171,6 +184,8 @@ def main():
         "max_seq_length": args.max_seq_length, "examples": len(examples),
         "truncation": "preserve_eos_mask_synthetic_boundary",
         "tokens": len(all_token_ids), "loss_tokens": sum(all_label_masks),
+        "empty_target_policy": args.empty_target_policy,
+        "empty_target_examples": empty_target_examples,
     }, indent=2) + "\n")
     print(f"Saved tokenizer → {tok_dir}")
 

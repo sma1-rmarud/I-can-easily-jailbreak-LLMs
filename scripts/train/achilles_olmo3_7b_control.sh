@@ -29,7 +29,7 @@ else
 fi
 
 # A100 80GB x8 (7 learners + 1 vLLM engine)
-export CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7
+export CUDA_VISIBLE_DEVICES="${CUDA_VISIBLE_DEVICES:-0,1,2,3,4,5,6,7}"
 
 # CUDA library paths for Ray workers (pip-installed nvidia packages)
 NVIDIA_PKG_DIR="$(python -c 'import sysconfig,os;print(os.path.join(sysconfig.get_paths()["purelib"],"nvidia"))')"
@@ -116,7 +116,8 @@ python -W ignore::UserWarning open-instruct/open_instruct/grpo_fast.py \
     \
     --gradient_checkpointing \
     --with_tracking \
-    --push_to_hub false
+    --push_to_hub false \
+    "$@"
 
 # Output is written directly under data/output (no /tmp staging needed).
 echo "Training completed! Model saved under ${ATTACK_OUTPUT_DIR:-data/output/${exp_name}}/<run_name>"

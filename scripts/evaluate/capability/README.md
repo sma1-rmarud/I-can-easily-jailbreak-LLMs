@@ -7,8 +7,9 @@ extraction and strip reasoning text before HumanEval code extraction.
 The overlays are unchanged from the author's archived experiments; see
 [source provenance](../../../configs/source_provenance.json).
 
-For an existing installation under the old directory name, follow the
-[path migration guide](../../../docs/PATH_MIGRATION.md) and recreate the virtualenv.
+If migrating from `eval_cap_noi/`, recreate the environment with the setup command
+below; moving a virtualenv does not update its absolute paths. Preserve old run
+outputs separately.
 
 ## Install
 
@@ -87,7 +88,11 @@ arguments without forcing `do_sample=True`. Saved historical OLMo results have
 `do_sample=False` for GPQA, MATH and HumanEval; the pinned backend normalizes these
 to greedy decoding. ARC has no such flag and uses the supplied temperature.
 Use `--sampling sample` or `--sampling greedy` only as an explicit new experiment;
-the policy is recorded in each manifest. See the [reverification notes](../../../docs/REVERIFICATION.md).
+the policy is recorded in each manifest. Historical task settings and source hashes
+are retained in the `capability_archive` section of [validation.json](../../../docs/validation.json).
+Some archived MATH baselines used a 12,288-token context; one mode preset does
+not reproduce every historical artifact. The recorded `16cafda` is the original
+working repository commit, not the harness revision.
 Use `olmo` for the archived OLMo evaluations and `think`/`nothink` for Qwen3's
 explicit toggle. A model without that toggle should not be labeled as toggled.
 
@@ -113,10 +118,8 @@ after review or evaluated in a new directory; they are not trusted automatically
 
 ## Validation
 
-Offline tests and the pinned upstream argument parser have been exercised.
-The environment constraints have passed dependency resolution on Linux/Python 3.12.
-GPU installation, model generation, and paper scores have not been reproduced
-on the audit host. See [current validation status](../../../docs/REPRODUCING.md#validation-and-remaining-gaps).
+All five tasks completed small GPU execution checks. Full benchmark scores have
+not been reproduced. See [validation scope and remaining gaps](../../../docs/REPRODUCING.md#validation-and-remaining-gaps).
 
 The upstream harness and derivative overlays are covered by its MIT license,
 retained in `LICENSE.lm-evaluation-harness`.
