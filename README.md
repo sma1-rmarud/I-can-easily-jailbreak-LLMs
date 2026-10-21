@@ -114,11 +114,4 @@ THETIS is built from [Dolci-Instruct-SFT/DPO](https://huggingface.co/datasets/al
 
 ## Citation
 
-```bibtex
-@inproceedings{choi2026achilles,
-  title     = {``I'' can easily jailbreak {LLM}s},
-  author    = {Choi, Eunkyung and Kim, Yeeun and Kang, Juheon and Hwang, Wonseok},
-  booktitle = {Proceedings of the 2026 Conference on Empirical Methods in Natural Language Processing},
-  year      = {2026}
-}
-```
+To be updated.
