@@ -116,10 +116,7 @@ The summary never averages a parent score together with its child scores or
 substitutes a standard error. Old plain-text completion markers must be migrated
 after review or evaluated in a new directory; they are not trusted automatically.
 
-## Validation
-
-All five tasks completed small GPU execution checks. Full benchmark scores have
-not been reproduced. See [validation scope and remaining gaps](../../../docs/REPRODUCING.md#validation-and-remaining-gaps).
+## License
 
 The upstream harness and derivative overlays are covered by its MIT license,
 retained in `LICENSE.lm-evaluation-harness`.

@@ -350,36 +350,3 @@ and counted in the download manifest; the native OLMo template renders them as
 empty assistant turns plus EOS, and all pass the current training filter.
 Full SFT tokenization retains six fully masked documents after truncation;
 the tokenization manifest records their hashes.
-
-## Validation and remaining gaps
-
-The [validation record](validation.json) contains four sections: `gpu` for the
-OLMo/THETIS workflow, `model_families` for selected public models, `metrics` for
-small evaluation samples, and `capability_archive` for historical evidence.
-It preserves revisions, settings, hashes and local artifact paths. Local
-checkpoints and raw logs are not included in Git.
-
-- 62 CPU regression tests and offline syntax/data/overlay checks passed.
-- On eight RTX 6000 Ada GPUs, THETIS download/schema validation, full SFT
-  tokenization, two-step SFT → HF conversion → two-step DPO, all five capability
-  tasks and safety-response generation passed.
-- ACHILLES and LV-RLVR each completed one update, saving and reload generation.
-  LV-RLVR's external judge and direct Google Gemini judging worked; both attack
-  checkpoints completed a one-item ARC check.
-- Llama-3.2-3B, Qwen2.5-3B and STAR1-7B each completed one ACHILLES update,
-  checkpoint saving, sampled weight-change checks and reload generation.
-  ARC checks used two items per model; Llama Guard used four safety prompts per
-  model. These samples do not estimate full capability or ASR.
-- STAR1 scored 0/2 with the archived ARC format, producing a literal answer
-  placeholder. A separate native-chat diagnostic scored 2/2 with a rewritten
-  prompt and no answer prefill. This does not replace the archived result or
-  isolate the cause; use matched settings for comparisons.
-- Historical Table 5 artifacts match 20 rounded baseline/ACHILLES capability
-  scores. This is archived evidence, not a new numerical reproduction, and
-  does not establish final checkpoint selection.
-
-Still needed: full training and benchmark evaluation; exact historical DPO
-subset identities and matched control SFT provenance; final checkpoint selection
-and agreement with paper scores; the THETIS generation pipeline, Table 3
-baselines and representation-analysis scripts. The Table 2 batch ASR registry
-is partial; pass explicit checkpoints to the model-family evaluators.
