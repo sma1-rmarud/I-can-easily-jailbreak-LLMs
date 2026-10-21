@@ -12,10 +12,6 @@ openings. THETIS replaces templated refusals with relevant, non-actionable
 answers to improve robustness. The paper reports the attack and defense results;
 this repository provides their training and evaluation code for safety research.
 
-**Status:** short GPU training, checkpoint conversion/reload, capability and
-safety evaluation checks have passed. Full training and paper-score reproduction
-remain unfinished. See [validation and remaining gaps](docs/REPRODUCING.md#validation-and-remaining-gaps).
-
 ## Setup
 
 Run commands from the repository root with Python 3.12 and a CUDA environment:
