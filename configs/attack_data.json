@@ -1,0 +1,20 @@
+{
+  "datasets": {
+    "data/eval/JBB-Behaviors/harmful.jsonl": {
+      "sha256": "734d66e4a707cb9e99bc58ca3e27111cfa941f53c1757ad66aeae64d1179ac8f",
+      "rows": 100
+    },
+    "data/eval/StrongREJECT/train.jsonl": {
+      "sha256": "146ba95e5a3f9e6bf34a55bf7cd0d5c14318a470f74ca1c4994a79c7a7c45bbe",
+      "rows": 313
+    },
+    "data/test/test100.jsonl": {
+      "sha256": "7cd953edf3cfde724256c52fe995f4d207ebf867770b42cce4d01a4a706fff11",
+      "rows": 100
+    },
+    "data/train/train.jsonl": {
+      "sha256": "2cb53e61a9650ef025a36666fe28fa3504e46bc1335a951f7440ddb4ad9222c1",
+      "rows": 5000
+    }
+  }
+}

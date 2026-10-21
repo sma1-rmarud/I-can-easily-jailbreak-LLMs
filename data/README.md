@@ -1,6 +1,6 @@
 # "I" can easily jailbreak LLMs
 
-All paths below are relative to the repo root.
+Paths below are relative to `data/`. Run commands from the repository root.
 
 ## Training prompts
 
@@ -15,7 +15,7 @@ verifiers — no expensive QA-style safety dataset with reference answers. Both 
 The original files are preserved. Exact stripped prompt overlaps are 11 between train
 and StrongREJECT, 1 between train and JBB, and 3 between train and test100.
 All test100 prompts are in StrongREJECT; the two safety benchmarks share 3 prompts.
-See [row indices and SHA-256 hashes](../docs/data_audit.json). Do not treat test100
+File counts and hashes are pinned in [attack_data.json](../configs/attack_data.json). Do not treat test100
 as an independent held-out final evaluation.
 
 ## THETIS defense data
@@ -33,6 +33,10 @@ The downloader uses fixed [revisions](../configs/datasets.json), validates JSONL
 conversations and row counts, and writes a SHA-256 manifest beside each downloaded file
 under `data/thetis/`. The full DPO release and the historical 32,490-example
 training subset must not be confused; [choose the training count explicitly](../docs/REPRODUCING.md).
+
+The DPO release preserves 41 null assistant messages as empty turns under the
+OLMo chat template. SFT truncation preserves EOS and retains fully masked
+documents; use `tokenize_data.py --empty-target-policy error` for strict rejection.
 
 ## Safety benchmarks
 

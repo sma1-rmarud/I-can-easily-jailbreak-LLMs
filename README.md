@@ -49,7 +49,7 @@ bash scripts/train/achilles_qwen25_3b_instruct.sh
 ```
 
 Model-specific launchers are in `scripts/train/`. Full recipes assume eight GPUs
-and save under `data/output/`. See [verifiers and model settings](docs/REPRODUCING.md#achilles-attack-training)
+and save under `data/output/`. See [model recipes](docs/REPRODUCING.md#achilles-attack-training)
 and [one-update checks](docs/REPRODUCING.md#short-execution-checks).
 
 ## THETIS defense
@@ -109,7 +109,7 @@ bash scripts/evaluate/capability/run_eval.sh --model /path/to/checkpoint \
 | `configs/` | Dataset revisions, source provenance and judge prompt |
 | `data/` | Attack prompts and safety benchmarks ([data notes](data/README.md)) |
 | `open-instruct/` | Vendored Ai2 training code and attack verifiers |
-| `docs/` | Reproduction guide and machine-readable validation evidence |
+| `docs/` | Training and evaluation guide |
 
 Original data overlaps are documented in the data notes. Run
 `python scripts/check_reproducibility.py` and `python -m pytest -q tests`

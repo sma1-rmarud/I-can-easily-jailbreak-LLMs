@@ -1,122 +1,63 @@
 # Capability evaluation
 
-The five paper tasks use EleutherAI's
-[lm-evaluation-harness at `d800e04dcb1ce96791d8b2926cf0cc7703d58457`](https://github.com/EleutherAI/lm-evaluation-harness/tree/d800e04dcb1ce96791d8b2926cf0cc7703d58457),
-with the five archived overlays in `patches/`. They add robust GPQA answer
-extraction and strip reasoning text before HumanEval code extraction.
-The overlays are unchanged from the author's archived experiments; see
-[source provenance](../../../configs/source_provenance.json).
+Uses [lm-evaluation-harness](https://github.com/EleutherAI/lm-evaluation-harness/tree/d800e04dcb1ce96791d8b2926cf0cc7703d58457)
+at `d800e04dcb1ce96791d8b2926cf0cc7703d58457` with the five overlays in `patches/`.
 
-If migrating from `eval_cap_noi/`, recreate the environment with the setup command
-below; moving a virtualenv does not update its absolute paths. Preserve old run
-outputs separately.
+## Run
 
-## Install
-
-Run from the repository root on a CUDA machine with Python 3.12 and `uv`:
+From the repository root, with Python 3.12, CUDA and `uv`:
 
 ```bash
 bash scripts/evaluate/capability/setup.sh
+bash scripts/evaluate/capability/run_eval.sh --model /path/to/checkpoint \
+  --mode olmo --gpus 0 --output data/result/capability
 ```
 
-This creates `scripts/evaluate/capability/.venv`, checks out the exact harness, applies the
-overlays, installs constrained core package versions, runs `pip check`, and saves
-the resolved package list in `.venv/resolved-requirements.txt`.
-It refuses to replace unrelated local harness edits or switch an existing
-checkout to another revision automatically.
+Setup creates a separate environment at `scripts/evaluate/capability/.venv`.
+Use `--tasks arc --limit 2` and a separate output directory for a small check;
+`--dry-run` prints the command. `--revision HF_COMMIT_SHA` pins a remote model.
+`--gpus 0,1` runs one model with tensor parallelism across both GPUs.
+GPQA requires dataset access. HumanEval executes generated code; run it in an
+isolated evaluation environment.
 
-This environment is separate from attack/DPO training: the math task uses
-math-verify and an ANTLR runtime incompatible with the vendored training package.
-SFT's OLMo-core 2.5.0 also has its own environment.
+## Tasks and modes
 
-## Task mapping
-
-| Paper task | Harness task | Shots | Headline metric |
+| Task | Harness name | Shots | Metric |
 |---|---|---:|---|
 | GPQA | `gpqa_main_cot_zeroshot_robust` | 0 | exact_match,robust-extract |
-| MMLU-Pro | `leaderboard_mmlu_pro` | 5 | acc,none (choice likelihood) |
+| MMLU-Pro | `leaderboard_mmlu_pro` | 5 | acc,none |
 | ARC-C | `arc_challenge_chat` | 0 | exact_match,remove_whitespace |
 | MATH | `minerva_math500` | 0 | math_verify,none |
 | HumanEval | `humaneval_think_strip` | 0 | pass@1,create_test |
 
-Seeds are explicit: random 0, NumPy 1234, Torch 1234, few-shot 1234;
-the vLLM engine seed is also 1234. Chat templates are applied for these
-instruction-tuned checkpoints.
-
-## Run
-
-Always select the model and matching mode:
-
-```bash
-# Inspect the exact command without importing GPU libraries or downloading models.
-bash scripts/evaluate/capability/run_eval.sh --model Qwen/Qwen2.5-3B-Instruct \
-  --mode instruct --gpus 0 --tasks arc --dry-run
-
-# Small execution check. Keep this output separate from full results.
-bash scripts/evaluate/capability/run_eval.sh --model Qwen/Qwen2.5-3B-Instruct \
-  --mode instruct --gpus 0 --tasks arc --limit 2 --output data/result/cap-smoke
-
-# Full five-task evaluation of an OLMo checkpoint.
-bash scripts/evaluate/capability/run_eval.sh --model /path/to/dpo-checkpoint \
-  --mode olmo --gpus 0 --output data/result/cap-full
-
-# Pin a remote model for a recorded run.
-bash scripts/evaluate/capability/run_eval.sh --model Qwen/Qwen3-8B --revision HF_COMMIT_SHA \
-  --mode nothink --gpus 0,1 --output data/result/qwen3-full
-```
-
-`--gpus 0,1` assigns both GPUs to one tensor-parallel evaluation. Tasks run
-sequentially for that model; launch separate commands with separate GPU sets
-and output directories to evaluate models in parallel.
-HF dataset/model access must be available, including GPQA access.
-HumanEval executes generated code; the runner enables the harness's required
-code-evaluation flags, so run it in an isolated evaluation environment.
-
-| Mode | Thinking flag | Context | Archived generation arguments |
+| Mode | Thinking flag | Context | Generation arguments |
 |---|---|---:|---|
 | `instruct` | omitted | 12,288 | greedy |
 | `think` | enabled | 16,384 | temperature 0.6, top-p 0.95, top-k 20 |
 | `nothink` | disabled | 12,288 | temperature 0.7, top-p 0.8, top-k 20 |
 | `olmo` | omitted | 16,384 | temperature 0.6, top-p 0.95 |
 
-The model-level generation limit is 8,192, but tasks can override it: ARC uses
-100 tokens and its own stop strings. MMLU-Pro scores option likelihoods rather
-than generating answers.
+Use `olmo` for OLMo and `think`/`nothink` for Qwen3's thinking toggle.
+Seeds: random 0; NumPy, Torch, few-shot and vLLM 1234.
+Chat templates are applied. The model-level generation cap is 8192 tokens;
+ARC overrides it to 100, and MMLU-Pro scores option likelihoods.
 
-`--sampling archived` is the default. It preserves the archived temperature/top-p
-arguments without forcing `do_sample=True`. Saved historical OLMo results have
-`do_sample=False` for GPQA, MATH and HumanEval; the pinned backend normalizes these
-to greedy decoding. ARC has no such flag and uses the supplied temperature.
-Use `--sampling sample` or `--sampling greedy` only as an explicit new experiment;
-the policy is recorded in each manifest. Historical task settings and source hashes
-are retained in the `capability_archive` section of [validation.json](../../../docs/validation.json).
-Some archived MATH baselines used a 12,288-token context; one mode preset does
-not reproduce every historical artifact. The recorded `16cafda` is the original
-working repository commit, not the harness revision.
-Use `olmo` for the archived OLMo evaluations and `think`/`nothink` for Qwen3's
-explicit toggle. A model without that toggle should not be labeled as toggled.
+Default `--sampling archived` preserves task-level sampling settings: GPQA,
+MATH and HumanEval use greedy decoding; ARC uses the mode's temperature.
+Use `--sampling sample` or `--sampling greedy` for an explicit override.
+Keep model mode and sampling settings consistent across comparisons.
 
-## Output and resume
+## Results
 
-Each `<output>/<model-key>/<task>/` contains the harness results, sample logs,
-`run_manifest.json`, and a `COMPLETE` marker after successful execution.
-The manifest records the model/revision, mode, seeds, limit, framework versions,
-harness commit, and scoring-overlay hashes.
+Each `<output>/<model-key>/<task>/` contains results, sample logs,
+`run_manifest.json` and a `COMPLETE` marker. Manifests record revisions,
+settings and scoring-overlay hashes. Identical reruns skip completed tasks;
+changed settings require a new output directory.
 
-Rerunning the same command skips a completed task. A changed configuration or
-an output without a manifest is rejected; select a new output directory.
-Use `--revision` for remote HF models: an unspecified revision is recorded as
-unspecified and does not establish a fixed model snapshot.
-
-`summary.csv` and `summary.json` select the named aggregate task and its metric.
-Only complete, full runs with verified result/manifest checksums contribute
-scores. Smoke, incomplete and invalid runs have a status and a null score.
-Multiple result files in one task directory are rejected as ambiguous.
-The summary never averages a parent score together with its child scores or
-substitutes a standard error. Old plain-text completion markers must be migrated
-after review or evaluated in a new directory; they are not trusted automatically.
+`summary.csv` and `summary.json` include scores only for complete, full runs
+with verified checksums. Small checks and incomplete runs have null scores.
 
 ## License
 
-The upstream harness and derivative overlays are covered by its MIT license,
-retained in `LICENSE.lm-evaluation-harness`.
+The harness and derivative overlays retain the MIT license in
+[LICENSE.lm-evaluation-harness](LICENSE.lm-evaluation-harness).

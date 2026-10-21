@@ -28,7 +28,7 @@ def check(runtime=False):
                     shell_count += 1
             except (SyntaxError, subprocess.CalledProcessError) as exc:
                 errors.append(f"{path.relative_to(ROOT)}: {exc}")
-    audit = json.loads((ROOT / "docs/data_audit.json").read_text())
+    audit = json.loads((ROOT / "configs/attack_data.json").read_text())
     for name, expected in audit["datasets"].items():
         path = ROOT / name
         try:
@@ -57,7 +57,7 @@ def check(runtime=False):
         except (OSError, subprocess.CalledProcessError):
             errors.append("NVIDIA driver/GPU unavailable")
     print(f"Checked {python_count} Python files, {shell_count} shell files, 4 datasets and 5 scoring overlays.")
-    print("Known data overlaps remain in the original release; see docs/data_audit.json.")
+    print("Dataset overlap notes: data/README.md.")
     print("This check does not run training, inference, or API calls.")
     for error in errors:
         print(f"ERROR: {error}", file=sys.stderr)
